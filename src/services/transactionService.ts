@@ -2,7 +2,7 @@
 'use client';
 
 import { db } from '@/lib/firebase';
-import { Transaction, Party, InventoryItem, Account } from '@/types';
+import { Transaction, Party, InventoryItem, Account, VerificationResult } from '@/types';
 import { 
   collection, addDoc, doc, updateDoc, deleteDoc, 
   query, onSnapshot, where, orderBy, getDocs, 
@@ -10,13 +10,9 @@ import {
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined, formatAmount } from '@/lib/utils';
-import { getAppSettings } from './settingsService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
 
-/**
- * Subscribes to all transactions and sorts them client-side to avoid index requirements.
- */
 export function subscribeToAllTransactions(
   onUpdate: (transactions: Transaction[]) => void,
   onError: (error: Error) => void
@@ -62,6 +58,41 @@ export function subscribeToTransactionsForParty(
     if (!collectionRef) return () => {};
 
     const q = query(collectionRef, where('partyId', '==', partyId));
+
+    return onSnapshot(q, (snapshot) => {
+        const transactions = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
+            } as Transaction;
+        });
+
+        transactions.sort((a, b) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+
+        onUpdate(transactions);
+    }, (error) => onError(error as Error));
+}
+
+export function subscribeToTransactionsForPartyIds(
+    partyIds: string[],
+    onUpdate: (transactions: Transaction[]) => void,
+    onError: (error: Error) => void
+) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef || partyIds.length === 0) return () => {};
+
+    // Firestore IN query limit is 10, so we might need multiple queries for more IDs
+    // For simplicity, we fetch in chunks if needed
+    const q = query(collectionRef, where('partyId', 'in', partyIds.slice(0, 10)));
 
     return onSnapshot(q, (snapshot) => {
         const transactions = snapshot.docs.map(doc => {
@@ -237,7 +268,7 @@ export async function createTransaction(tx: Omit<Transaction, 'id'>) {
     return addTransaction(tx);
 }
 
-export async function attemptAutoVerification(txRef: string, trxId: string, channels: any[], amount: number) {
+export async function attemptAutoVerification(txRef: string, trxId: string, channels: any[], amount: number): Promise<VerificationResult> {
     return { isVerified: false };
 }
 
@@ -286,4 +317,9 @@ export function subscribeToTransactionsForVerification(staffId: string, onUpdate
     const coll = collection(db, 'transactions');
     const q = query(coll, where('paymentStatus', '==', 'pending'));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
+}
+
+export async function handleSmsNotification(transaction: Transaction, party: Party, paidAmount: number, previousDue: number) {
+    const { handleSmsNotification: sendSms } = await import('./possmsnotificationService');
+    return sendSms(transaction, party, paidAmount, previousDue);
 }

@@ -17,10 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, ChevronDown } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, ChevronDown, Share2, Landmark, Briefcase, FileText, PiggyBank, Scale } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -303,10 +303,38 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     </div>
                 </div>
                 <div className="mt-2">
-                    <Card className="bg-gray-100 dark:bg-gray-800 border-0 shadow-sm">
-                        <CardContent className="p-2 text-center">
-                            <p className="text-[8px] uppercase font-black text-gray-500 tracking-wider">{currentBalance >= 0 ? 'NET PAYABLE' : 'NET RECEIVABLE'}</p>
-                            <p className={cn("text-xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
+                    <Card className="bg-gray-100 dark:bg-gray-800 border-0 shadow-sm relative overflow-hidden">
+                        <CardContent className="p-3 text-center">
+                            <p className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-1">{currentBalance >= 0 ? 'NET PAYABLE' : 'NET RECEIVABLE'}</p>
+                            <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
+                            
+                            {/* Quick Action Icon Row */}
+                            <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <button onClick={() => setActiveTab('loan')} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors"><Landmark className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Loan</span>
+                                </button>
+                                <button onClick={() => setActiveTab('old_ledger')} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-blue-100 text-blue-600 group-hover:bg-blue-200 transition-colors"><History className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Old</span>
+                                </button>
+                                <button onClick={() => setActiveTab('party-details')} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-orange-100 text-orange-600 group-hover:bg-orange-200 transition-colors"><FileText className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Exp</span>
+                                </button>
+                                <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">POS</span>
+                                </button>
+                                <button onClick={() => window.print()} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Print</span>
+                                </button>
+                                <button onClick={() => toast({ title: "Sharing not implemented" })} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-teal-100 text-teal-600 group-hover:bg-teal-200 transition-colors"><Share2 className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Share</span>
+                                </button>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
@@ -315,10 +343,13 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
         <main className="container mx-auto p-3 flex-1 overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 h-auto p-1 bg-gray-100 dark:bg-gray-800 rounded-lg mb-2">
-                <TabsTrigger value="transactions" className="text-xs">Transactions</TabsTrigger>
-                <TabsTrigger value="party-details" className="text-xs">Analysis</TabsTrigger>
+            <TabsList className="hidden">
+                <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                <TabsTrigger value="party-details">Analysis</TabsTrigger>
+                <TabsTrigger value="loan">Loans</TabsTrigger>
+                <TabsTrigger value="old_ledger">Old Data</TabsTrigger>
             </TabsList>
+            
             <TabsContent value="transactions" className="space-y-3">
                 <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
                     <Table>
@@ -378,6 +409,33 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       </TableFooter>
                     </Table>
                 </div>
+            </TabsContent>
+
+            <TabsContent value="party-details">
+                <Card>
+                    <CardHeader><CardTitle>Party Analysis</CardTitle></CardHeader>
+                    <CardContent>
+                        <p className="text-muted-foreground text-center py-12">Analysis data coming soon...</p>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="loan">
+                 <Card>
+                    <CardHeader><CardTitle>Loan Management</CardTitle></CardHeader>
+                    <CardContent>
+                        <p className="text-muted-foreground text-center py-12">Loan tracking for this party coming soon...</p>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="old_ledger">
+                 <Card>
+                    <CardHeader><CardTitle>Old Ledger Data</CardTitle></CardHeader>
+                    <CardContent>
+                        <p className="text-muted-foreground text-center py-12">Imported historical data coming soon...</p>
+                    </CardContent>
+                </Card>
             </TabsContent>
           </Tabs>
         </main>
