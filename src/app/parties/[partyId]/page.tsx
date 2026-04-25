@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { formatAmount, formatDate, getPartyBalanceEffect } from '@/lib/utils';
+import { cn, formatAmount, formatDate, getPartyBalanceEffect } from '@/lib/utils';
 import { Loader2, ArrowLeft, Printer, MoreVertical, Edit, Trash2, ShoppingCart, RefreshCcw, Landmark, Briefcase, MessageSquare, Phone, ArrowDown, ArrowUp } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +46,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', via: 'all' });
   const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
+  const [activeTab, setActiveTab] = useState("transactions");
   
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -56,9 +57,16 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         if (snap.exists()) setParty({ id: snap.id, ...snap.data() } as Party);
       });
       getAppSettings().then(setAppSettings);
-      subscribeToTransactionsForParty(partyId, setTransactions, console.error);
-      subscribeToAccounts(setAccounts, console.error);
-      setTimeout(() => setLoading(false), 500);
+      const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, console.error);
+      const unsubAcc = subscribeToAccounts(setAccounts, console.error);
+      
+      const timer = setTimeout(() => setLoading(false), 500);
+      
+      return () => {
+          unsubTx();
+          unsubAcc();
+          clearTimeout(timer);
+      };
     }
   }, [partyId, toast]);
 
@@ -69,8 +77,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
         if (dateA !== dateB) return dateA - dateB;
-        const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
-        const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeA - timeB;
     });
     
@@ -119,7 +127,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
   };
 
-  if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary" /></div>;
+  if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
     <SidebarInset className="flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -184,7 +192,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span className="text-xs">{t.description}</span>
-                                            <Badge variant="outline" className="text-[8px] w-fit h-3 uppercase">{t.type}</Badge>
+                                            <Badge variant="outline" className="text-[8px] w-fit h-4 uppercase">{t.type}</Badge>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right text-red-600 text-[10px]">{isDebit ? formatAmount(t.amount) : '-'}</TableCell>
@@ -223,7 +231,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
 export default function PartyLedgerPageWrapper(props: { params: Promise<{ partyId: string }> }) {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary" /></div>}>
+    <Suspense fallback={<div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>}>
       <PartyLedgerPage {...props} />
     </Suspense>
   );
