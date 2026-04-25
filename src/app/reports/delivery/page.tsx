@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -280,7 +279,7 @@ export default function DeliveryReport() {
     const [editingPayment, setEditingPayment] = useState<Transaction | null>(null);
 
     useEffect(() => {
-        const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: "destructive", title: 'Error fetching transactions', description: err.message }));
+        const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: "destructive", title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
         const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: "destructive", title: 'Error fetching parties', description: err.message }));
         const unsubAccounts = subscribeToAccounts(setAccounts, (err) => toast({ variant: "destructive", title: 'Error fetching accounts', description: err.message }));
         getAppSettings().then(setAppSettings);
@@ -319,7 +318,7 @@ export default function DeliveryReport() {
             .map(t => ({
                 transaction: t,
                 deliveryPerson: parties.find(p => p.id === t.deliveredBy) || { id: t.deliveredBy!, name: 'Unknown / Deleted Person' },
-                customer: parties.find(p => p.id === t.partyId) || { id: t.partyId || 'walk-in', name: partyMap.get(t.partyId!) || 'Walk-in Customer' },
+                customer: parties.find(p => p.id === t.partyId) || { id: t.partyId || 'walkin', name: partyMap.get(t.partyId!) || 'Walk-in Customer' },
                 itemCount: t.items?.reduce((sum, item) => sum + item.quantity, 0) || 0,
             }))
             .sort((a,b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime());
@@ -439,7 +438,7 @@ export default function DeliveryReport() {
             </div>
             
             {payingPerson && <PayDeliveryPersonDialog open={!!payingPerson} onOpenChange={() => setPayingPerson(null)} deliveryPerson={payingPerson} accounts={accounts} unpaidDeliveries={unpaidDeliveriesForPerson(payingPerson.id)} onPaymentSuccess={() => {}} initialVia={filters.via} appSettings={appSettings} />}
-            <EditPaymentDialog open={!!editingPayment} onOpenChange={() => setEditingPayment(null)} payment={editingPayment} accounts={accounts} appSettings={appSettings} onSave={handleSaveEdit} />
+            <EditPaymentDialog open={!!editingPayment} onOpenChange={setEditingPayment} payment={editingPayment} accounts={accounts} appSettings={appSettings} onSave={handleSaveEdit} />
 
             <Card className="print-area">
                 <CardHeader className="no-print">

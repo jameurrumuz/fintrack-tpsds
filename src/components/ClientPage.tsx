@@ -148,7 +148,7 @@ export default function ClientPage() {
   useEffect(() => {
     const loadSampleDataAndToast = (reason: 'not_configured' | 'error') => {
         const title = reason === 'not_configured' ? "Firebase Not Configured" : "Firebase Connection Error";
-        if (reason === 'other') {
+        if (reason === 'error') {
             toast({
                 variant: 'destructive',
                 title: title,

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
@@ -59,7 +57,7 @@ function AccountLedgerPage({ params }: { params: Promise<{ accountId: string }> 
       
       const unsubTransactions = subscribeToAllTransactions(
         setAllTransactions,
-        (error) => toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch transactions.' })
+        (error) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: 'Could not fetch transactions.' })
       );
       
       const unsubAccounts = subscribeToAccounts(setAllAccounts, console.error);
@@ -322,4 +320,3 @@ export default function AccountLedgerPageWrapper(props: { params: { partyId: str
     </Suspense>
   );
 }
-    
