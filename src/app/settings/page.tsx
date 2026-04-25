@@ -110,7 +110,7 @@ const expenseBookSchema = z.object({
 
 const smsTemplateSchema = z.object({
   id: z.string(),
-  type: z.enum(['creditSale', 'cashSale', 'receivePayment', 'givePayment', 'paymentReminder', 'creditSaleWithPartPayment']),
+  type: z.enum(['creditSale', 'cashSale', 'receivePayment', 'givePayment', 'paymentReminder', 'creditSaleWithPartPayment', 'cashSaleWithOverpayment']),
   message: z.string().min(1, 'Template message cannot be empty.'),
 });
 
@@ -991,7 +991,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
               <div className="space-y-2">
-                <Label>Appearance Settings এ ফন্ট সাইজ পরিবর্তন করে Save All Settings দিলে সেভ হচ্ছে না এটি ঠিক করে দাও যেন সেভ হয় ({watchedSettings.fontSize}px)</Label>
+                <Label>Font Size ({watchedSettings.fontSize}px)</Label>
                 <Controller
                   name="fontSize"
                   control={form.control}
@@ -1432,6 +1432,7 @@ export default function SettingsPage() {
               </div>
           </CardContent>
       </Card>
+      <ChangePinDialog open={isChangePinOpen} onOpenChange={setIsChangePinOpen} />
     </div>
   );
 }

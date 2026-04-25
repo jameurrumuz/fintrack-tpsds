@@ -8,7 +8,7 @@ import {
   runTransaction, serverTimestamp, Timestamp, writeBatch, limit, getDoc, setDoc
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
-import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined } from '@/lib/utils';
+import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined, formatAmount } from '@/lib/utils';
 import { sendSmsViaSmsq } from './smsqService';
 import { sendSmsViaTwilio } from './twilioService';
 import { sendSmsViaPushbullet } from './pushbulletService';
