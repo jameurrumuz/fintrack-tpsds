@@ -1410,9 +1410,9 @@ export default function SettingsPage() {
                       <AlertDialogContent>
                           <AlertDialogHeader>
                               <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
+                              <AlertDialogDescriptionComponent>
                                   This action will iterate through all of your transactions and recalculate the current balance for every account. This is useful if you find a balance discrepancy, but it can be a slow operation if you have thousands of transactions.
-                              </AlertDialogDescription>
+                              </AlertDialogDescriptionComponent>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
