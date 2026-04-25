@@ -177,7 +177,7 @@ export default function TransactionTable({ groupedTransactions, accounts, partie
               const monthColorClass = colorToggle ? 'bg-blue-50/30 dark:bg-blue-900/10' : 'bg-transparent';
 
               return (
-              <React.Fragment key={group.date}>
+              <React.Fragment key={`${group.date}-${groupIndex}`}>
                 <TableRow key={`date-header-${group.date}`} className="bg-primary/10 hover:bg-primary/20 sticky top-0 z-10">
                   <TableCell colSpan={6} className="p-2">
                     <div className="flex justify-between items-center">
