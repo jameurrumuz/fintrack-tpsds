@@ -74,7 +74,7 @@ export default function Page() {
   useEffect(() => {
     setLoading(true);
     const unsubAccounts = subscribeToAccounts(setAccounts, (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
-    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'Error fetching transactions' }));
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও' }));
     const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: 'destructive', title: 'Error fetching parties' }));
     const unsubReminders = subscribeToReminders(setReminders, (err) => toast({ variant: 'destructive', title: 'Error fetching reminders' }));
     const unsubInventory = subscribeToInventoryItems(setInventoryItems, (err) => toast({ variant: 'destructive', title: 'Error fetching inventory' }));

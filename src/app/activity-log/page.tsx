@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -45,7 +43,7 @@ export default function ActivityLogPage() {
             setLoading(false);
         },
         (err) => {
-            toast({ variant: 'destructive', title: 'Error', description: err.message });
+            toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message });
             setLoading(false);
         }
     );
@@ -261,4 +259,3 @@ export default function ActivityLogPage() {
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -56,7 +55,7 @@ const SmsLanguageDialog = ({ open, onOpenChange, onSend }: { open: boolean; onOp
 };
 
 
-const SendSmsDialog = ({ party, appSettings, onSend }: { party: Party & { balance: number }, appSettings: AppSettings | null, onSend: (to: string, message: string) => Promise<void> }) => {
+const SendSmsDialog = ({ party, appSettings, onSend }: { party: Party | null, appSettings: AppSettings | null, onSend: (to: string, message: string) => Promise<void> }) => {
     const defaultBusinessName = appSettings?.businessProfiles?.[0]?.name || 'our company';
     const [message, setMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -65,14 +64,14 @@ const SendSmsDialog = ({ party, appSettings, onSend }: { party: Party & { balanc
 
     useEffect(() => {
         if(party){
-             setMessage(`Dear ${party.name}, your current due is BDT ${formatAmount(Math.abs(party.balance), false)}. Please clear your dues as soon as possible. Thank you. - ${defaultBusinessName}`);
+             setMessage(`Dear ${party.name}, your current due is BDT ${formatAmount(Math.abs(party.balance || 0), false)}. Please clear your dues as soon as possible. Thank you. - ${defaultBusinessName}`);
         }
     }, [party, defaultBusinessName]);
 
 
     const generateSmsMessage = (lang: 'en' | 'bn', includeBalance: boolean): string => {
         if (!party) return '';
-        const amountStr = formatAmount(Math.abs(party.balance), false);
+        const amountStr = formatAmount(Math.abs(party.balance || 0), false);
         const businessName = defaultBusinessName;
 
         let baseMessage: string;
@@ -97,12 +96,14 @@ const SendSmsDialog = ({ party, appSettings, onSend }: { party: Party & { balanc
     };
 
     const handleFinalSend = async () => {
-        if (!party.phone) return;
+        if (!party || !party.phone) return;
         setIsSending(true);
         await onSend(party.phone, message);
         setIsSending(false);
     };
     
+    if (!party) return null;
+
     return (
         <>
         <SmsLanguageDialog open={isSmsLangDialogOpen} onOpenChange={setIsSmsLangDialogOpen} onSend={handleSendSms} />

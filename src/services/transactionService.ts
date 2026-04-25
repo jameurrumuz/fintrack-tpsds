@@ -5,7 +5,7 @@ import { Transaction, Party, InventoryItem, Account } from '@/types';
 import { 
   collection, addDoc, doc, updateDoc, deleteDoc, 
   query, onSnapshot, where, orderBy, getDocs, 
-  runTransaction, serverTimestamp, Timestamp, writeBatch, limit, getDoc
+  runTransaction, serverTimestamp, Timestamp, writeBatch, limit, getDoc, setDoc
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined } from '@/lib/utils';
@@ -427,7 +427,7 @@ export async function handleSmsNotification(
         const appSettings = await getAppSettings();
         if (!appSettings?.smsServiceEnabled || !Array.isArray(appSettings.smsTemplates)) return;
         
-        let templateType: 'cashSale' | 'creditSale' | 'receivePayment' | 'givePayment' | 'creditSaleWithPartPayment' | undefined;
+        let templateType: 'cashSale' | 'creditSale' | 'receivePayment' | 'givePayment' | 'creditSaleWithPartPayment' | 'cashSaleWithOverpayment' | undefined;
         
         switch (transaction.type) {
             case 'sale':
@@ -450,14 +450,10 @@ export async function handleSmsNotification(
         let template = appSettings.smsTemplates.find(t => t.type === templateType);
 
         if (!template && templateType === 'creditSaleWithPartPayment') {
-            console.warn("Template 'creditSaleWithPartPayment' not found, falling back to 'creditSale'");
             template = appSettings.smsTemplates.find(t => t.type === 'creditSale');
         }
 
-        if (!template || !template.message) {
-            console.warn(`No SMS template found for type: ${templateType}`);
-            return;
-        }
+        if (!template || !template.message) return;
         
         let currentBalance;
         if (transaction.type === 'credit_sale') {
@@ -493,15 +489,12 @@ export async function handleSmsNotification(
         let message = template.message
             .replace(/{partyName}/g, party.name)
             .replace(/{amount}/g, formatAmount(transaction.amount, false))
-            .replace(/{billAmount}/g, formatAmount(transaction.amount, false))
             .replace(/{date}/g, safeFormatDate(transaction.date))
             .replace(/{businessName}/g, businessName)
             .replace(/{invoiceNumber}/g, transaction.invoiceNumber?.replace('INV-', '') || '')
-            .replace(/{invoiceNo}/g, transaction.invoiceNumber?.replace('INV-', '') || '')
             .replace(/{previousDue}/g, previousBalanceStr)
             .replace(/{currentBalance}/g, currentBalanceStr)
-            .replace(/{PartPaymentAmount}/g, formatAmount(paymentAmountForSms, false))
-            .replace(/{paidAmount}/g, formatAmount(paymentAmountForSms, false));
+            .replace(/{PartPaymentAmount}/g, formatAmount(paymentAmountForSms, false));
 
         const smsProvider = appSettings.smsProvider || 'twilio';
         
@@ -511,11 +504,20 @@ export async function handleSmsNotification(
             await sendSmsViaTwilio(party.phone!, message, appSettings.twilioAccountSid, appSettings.twilioAuthToken, appSettings.twilioMessagingServiceSid);
         } else if (smsProvider === 'pushbullet' && appSettings.pushbulletAccessToken) {
             await sendSmsViaPushbullet(party.phone!, message, appSettings.pushbulletAccessToken, appSettings.pushbulletDeviceId);
-        } else {
-             console.warn("SMS provider not configured or credentials missing.");
         }
         
     } catch (err) {
         console.warn(`Could not prepare SMS for transaction. Error: `, err);
     }
+}
+
+export async function getAllTransactions(): Promise<Transaction[]> {
+    if (!db) return [];
+    const snap = await getDocs(collection(db, 'transactions'));
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+}
+
+export async function restoreData(data: any): Promise<void> {
+    const { restoreAllData } = await import('./backupService');
+    return restoreAllData(data);
 }
