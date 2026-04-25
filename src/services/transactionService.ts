@@ -1,3 +1,4 @@
+
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -35,6 +36,86 @@ export function subscribeToAllTransactions(
   }, (error) => onError(error as Error));
 }
 
+export function subscribeToTransactionsForParty(
+    partyId: string,
+    onUpdate: (transactions: Transaction[]) => void,
+    onError: (error: Error) => void
+) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef) return () => {};
+
+    const q = query(collectionRef, where('partyId', '==', partyId));
+
+    return onSnapshot(q, (snapshot) => {
+        const transactions = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
+            } as Transaction;
+        });
+        onUpdate(transactions);
+    }, (error) => onError(error as Error));
+}
+
+export function subscribeToTransactionsForPartyIds(
+    partyIds: string[],
+    onUpdate: (transactions: Transaction[]) => void,
+    onError: (error: Error) => void
+) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef || partyIds.length === 0) {
+        onUpdate([]);
+        return () => {};
+    }
+
+    const chunks = [];
+    for (let i = 0; i < partyIds.length; i += 30) {
+        chunks.push(partyIds.slice(i, i + 30));
+    }
+
+    const unsubscribes = chunks.map(chunk => {
+        const q = query(collectionRef, where('partyId', 'in', chunk));
+        return onSnapshot(q, (snapshot) => {
+            const transactions = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
+                } as Transaction;
+            });
+            onUpdate(transactions);
+        }, (error) => onError(error as Error));
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+}
+
+export function subscribeToTransactionsForVerification(
+    staffId: string,
+    onUpdate: (transactions: Transaction[]) => void,
+    onError: (error: Error) => void
+) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef) return () => {};
+
+    const q = query(collectionRef, where('paymentStatus', '==', 'pending'));
+
+    return onSnapshot(q, (snapshot) => {
+        const transactions = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
+            } as Transaction;
+        });
+        onUpdate(transactions);
+    }, (error) => onError(error as Error));
+}
+
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<string> {
   if (!db) throw new Error('Firebase not configured');
   
@@ -45,7 +126,6 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
 
   const docRef = await addDoc(collection(db, 'transactions'), cleanData);
   
-  // After adding transaction, recalculate relevant balances
   if (transactionData.partyId) {
     await recalculatePartyBalance(transactionData.partyId);
   }
@@ -71,7 +151,6 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
   const cleanUpdates = cleanUndefined(updates);
   await updateDoc(txRef, cleanUpdates);
 
-  // Recalculate balances for old and new parties/accounts if they changed
   const partiesToSync = new Set([oldData.partyId, updates.partyId].filter(Boolean) as string[]);
   const accountsToSync = new Set([
       oldData.accountId, updates.accountId, 
@@ -162,8 +241,99 @@ export async function recalculateBalancesFromTransaction(startDate?: string): Pr
 }
 
 export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransactions: number, updatedItems: number }> {
-    // Basic implementation for build health
-    return { updatedTransactions: 0, updatedItems: 0 };
+    if (!db) throw new Error("Firebase not configured");
+
+    const batchSize = 450;
+    let updatedTransactionsCount = 0;
+    let updatedItemsCount = 0;
+
+    const inventorySnap = await getDocs(collection(db, 'inventory'));
+    const allTransactionsSnap = await getDocs(query(collection(db, 'transactions'), orderBy('date', 'asc'), orderBy('createdAt', 'asc')));
+    
+    const inventory = inventorySnap.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem));
+    const allTransactionsList = allTransactionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+
+    const itemQueues: Map<string, { cost: number, quantity: number, date: string }[]> = new Map();
+    
+    inventory.forEach(item => {
+        itemQueues.set(item.id, []);
+    });
+
+    const txUpdates: { id: string, items: Transaction['items'] }[] = [];
+
+    allTransactionsList.forEach(tx => {
+        if (!tx.enabled || !tx.items) return;
+
+        const isPurchase = ['purchase', 'credit_purchase', 'sale_return'].includes(tx.type);
+        const isSale = ['sale', 'credit_sale', 'purchase_return'].includes(tx.type);
+
+        if (isPurchase) {
+            tx.items.forEach(item => {
+                const queue = itemQueues.get(item.id) || [];
+                queue.push({ cost: item.price, quantity: item.quantity, date: tx.date });
+                itemQueues.set(item.id, queue);
+            });
+        } else if (isSale) {
+            const updatedTxItems = tx.items.map(item => {
+                const queue = itemQueues.get(item.id) || [];
+                const costResult = calculateFifoCost(queue, item.quantity);
+                
+                if (costResult.totalCost > 0) {
+                    return { ...item, cost: costResult.totalCost / item.quantity };
+                }
+                return item;
+            });
+
+            if (JSON.stringify(tx.items) !== JSON.stringify(updatedTxItems)) {
+                txUpdates.push({ id: tx.id, items: updatedTxItems });
+            }
+        }
+    });
+
+    for (let i = 0; i < txUpdates.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = txUpdates.slice(i, i + batchSize);
+        chunk.forEach(update => {
+            batch.update(doc(db, 'transactions', update.id), { items: update.items });
+            updatedTransactionsCount++;
+        });
+        await batch.commit();
+    }
+
+    for (let i = 0; i < inventory.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = inventory.slice(i, i + batchSize);
+        chunk.forEach(item => {
+            const queue = itemQueues.get(item.id) || [];
+            batch.update(doc(db, 'inventory', item.id), { 
+                costHistory: queue,
+            });
+            updatedItemsCount++;
+        });
+        await batch.commit();
+    }
+
+    return { updatedTransactions: updatedTransactionsCount, updatedItems: updatedItemsCount };
+}
+
+function calculateFifoCost(queue: { cost: number, quantity: number }[], sellQty: number) {
+    let remainingToSell = sellQty;
+    let totalCost = 0;
+
+    while (remainingToSell > 0 && queue.length > 0) {
+        const batch = queue[0];
+        if (batch.quantity <= remainingToSell) {
+            totalCost += batch.quantity * batch.cost;
+            remainingToSell -= batch.quantity;
+            queue.shift(); 
+        } else {
+            totalCost += remainingToSell * batch.cost;
+            batch.quantity -= remainingToSell;
+            remainingToSell = 0;
+        }
+    }
+
+    return { totalCost, remainingToSell };
 }
 
 export function subscribeToPendingPayments(onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
