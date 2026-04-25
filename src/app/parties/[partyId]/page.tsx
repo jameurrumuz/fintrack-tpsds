@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
@@ -6,8 +7,7 @@ import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Transaction, Party, Account, AppSettings } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
-import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction, recalculateBalancesFromTransaction } from '@/services/transactionService';
-import { getOldLedgerData, updateParty } from '@/services/partyService';
+import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction } from '@/services/transactionService';
 import { getAppSettings } from '@/services/settingsService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, MessageSquare, Phone, RefreshCcw, Save, Plus, ShoppingCart, User, Landmark, Briefcase, Wallet } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -30,6 +30,7 @@ import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
 import { format as formatFns } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -137,7 +138,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime());
+    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(a.date).getTime());
 
     return { 
         groupedTransactions: groupedArray, 

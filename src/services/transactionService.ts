@@ -1,3 +1,4 @@
+
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -244,15 +245,6 @@ export async function attemptAutoVerification(txRef: string, trxId: string, chan
     return { isVerified: false };
 }
 
-export async function handleSmsNotification(
-    transaction: Transaction,
-    party: Party,
-    paidAmount: number = 0,
-    previousDue: number
-) {
-    // SMS logic implementation...
-}
-
 export async function getAllTransactions(): Promise<Transaction[]> {
     if (!db) return [];
     const snap = await getDocs(collection(db, 'transactions'));
@@ -274,4 +266,22 @@ export function subscribeToNewOnlineOrders(onUpdate: (txs: Transaction[]) => voi
     const coll = collection(db, 'transactions');
     const q = query(coll, where('status', '==', 'pending'), where('adminNotified', '==', false));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
+}
+
+export async function deleteTransactionByDetails(details: string): Promise<void> {
+    if (!db) return;
+    const q = query(collection(db, 'transactions'), where('description', '==', details));
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+}
+
+export async function updateTransactionByDetails(details: string, updates: Partial<Transaction>): Promise<void> {
+    if (!db) return;
+    const q = query(collection(db, 'transactions'), where('description', '==', details));
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.update(d.ref, updates));
+    await batch.commit();
 }

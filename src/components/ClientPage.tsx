@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -25,9 +26,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { Terminal } from "lucide-react"
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { format as formatFns } from 'date-fns';
 import BalanceSummary from './BalanceSummary';
 
@@ -84,14 +82,11 @@ export default function ClientPage() {
   const [firebaseErrorType, setFirebaseErrorType] = useState<FirebaseErrorType | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Transaction | null>(null);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [canShare, setCanShare] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const { toast } = useToast();
-  const router = useRouter();
 
 
   const [filters, setFilters] = useState<Filters>(() => {
@@ -176,14 +171,6 @@ export default function ClientPage() {
     };
   }, [toast]);
   
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-        const dummyFile = new File(["dummy"], "dummy.json", { type: "application/json" });
-        if (navigator.canShare && navigator.canShare({ files: [dummyFile] })) {
-            setCanShare(true);
-        }
-    }
-  }, []);
 
   const handleAddTransaction = async (data: Omit<Transaction, 'id' | 'enabled'>[], mode: 'saveAndClose' | 'saveAndNext') => {
     try {
@@ -235,7 +222,7 @@ export default function ClientPage() {
     }
   };
   
-  const { filteredTransactions, filteredIds, openingBalance } = useMemo(() => {
+  const { groupedTransactions, filteredIds, openingBalance } = useMemo(() => {
     const firstDateInFilter = filters.dateFrom || '1970-01-01';
     
     let runningBalance = 0;
@@ -327,10 +314,6 @@ export default function ClientPage() {
     }
   };
 
-  const handleRestoreClick = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -340,7 +323,6 @@ export default function ClientPage() {
         return;
     }
 
-    setIsRestoring(true);
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
@@ -352,7 +334,6 @@ export default function ClientPage() {
         } catch (error: any) {
             toast({ variant: 'destructive', title: "Error", description: error.message });
         } finally {
-            setIsRestoring(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
