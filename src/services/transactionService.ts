@@ -281,3 +281,9 @@ export async function updateTransactionByDetails(details: string, updates: Parti
     snap.docs.forEach(d => batch.update(d.ref, updates));
     await batch.commit();
 }
+
+export function subscribeToTransactionsForVerification(staffId: string, onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    const coll = collection(db, 'transactions');
+    const q = query(coll, where('paymentStatus', '==', 'pending'));
+    return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
+}
