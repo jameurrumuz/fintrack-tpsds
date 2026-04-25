@@ -4,10 +4,10 @@ import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Transaction, Party, Account, AppSettings, Loan, AmortizationEntry } from '@/types';
+import type { Transaction, Party, Account, AppSettings } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
-import { subscribeToTransactionsForParty, updateTransaction, addTransaction as addTxService, toggleTransaction, recalculateBalancesFromTransaction } from '@/services/transactionService';
-import { getOldLedgerData, updateParty, saveLoanAndUpdateParty, deleteLoan, markEmiAsPaid, updateLoanDetails, editEmiPaymentTransactions, deleteEmiPayment } from '@/services/partyService';
+import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction, recalculateBalancesFromTransaction } from '@/services/transactionService';
+import { getOldLedgerData, updateParty } from '@/services/partyService';
 import { getAppSettings } from '@/services/settingsService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,14 +17,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, MessageSquare, Phone, RefreshCcw } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, MessageSquare, Phone, RefreshCcw, Save, Plus, ShoppingCart, User, Landmark, Briefcase, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { DatePicker } from '@/components/ui/date-picker';
+import { format as formatFns } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
+
+const partyTransactionSchema = z.object({
+  date: z.date(),
+  description: z.string().min(1, 'Description is required'),
+  amount: z.coerce.number().positive('Amount must be positive'),
+  accountId: z.string().optional(),
+  type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale_return', 'purchase_return', 'credit_give', 'credit_income']),
+  via: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (['give', 'receive', 'sale', 'purchase', 'spent', 'income'].includes(data.type)) {
+        if (!data.accountId) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Account is required for this transaction type.',
+                path: ['accountId'],
+            });
+        }
+    }
+});
+
+type FormValues = z.infer<typeof partyTransactionSchema>;
 
 function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { partyId } = use(params);
@@ -40,13 +66,31 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("transactions");
   
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formType, setFormType] = useState<'give' | 'receive'>('give');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const transactionForm = useForm<FormValues>({
+    resolver: zodResolver(partyTransactionSchema),
+    defaultValues: {
+      date: new Date(),
+      description: '',
+      type: 'receive',
+      amount: '' as any,
+      accountId: '',
+      via: '',
+    },
+  });
 
   useEffect(() => {
     if (partyId) {
       setLoading(true);
       getDoc(doc(db, 'parties', partyId)).then(snap => {
-        if (snap.exists()) setParty({ id: snap.id, ...snap.data() } as Party);
+        if (snap.exists()) {
+          const data = snap.data();
+          setParty({ id: snap.id, ...data } as Party);
+          transactionForm.setValue('via', data.group || 'Personal');
+        }
       });
       getAppSettings().then(setAppSettings);
       const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
@@ -60,7 +104,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           clearTimeout(timer);
       };
     }
-  }, [partyId, toast]);
+  }, [partyId, toast, transactionForm]);
 
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
@@ -103,6 +147,24 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     };
   }, [transactions, filters, isDateFilterEnabled]);
 
+  const handleAddTransaction = async (data: FormValues) => {
+    if (!party) return;
+    try {
+        await addTransaction({
+            ...data,
+            date: formatFns(data.date, 'yyyy-MM-dd'),
+            partyId: party.id,
+            enabled: true,
+            via: data.via || 'Personal',
+        });
+        toast({ title: "Success", description: "Transaction added successfully." });
+        setIsFormOpen(false);
+        transactionForm.reset();
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: "Error", description: error.message });
+    }
+  };
+
   const handleUpdateTransaction = async (data: Omit<Transaction, 'id' | 'enabled'>) => {
     if (!editingTransaction) return;
     try {
@@ -122,9 +184,43 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
-    <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
+        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogContent>
+                <DialogHeader><DialogTitle>Record {formType === 'give' ? 'I Gave' : 'I Received'}</DialogTitle></DialogHeader>
+                <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1"><Label>Amount</Label><Input type="number" step="0.01" {...transactionForm.register('amount')} autoFocus /></div>
+                        <div className="space-y-1"><Label>Date</Label>
+                            <Controller control={transactionForm.control} name="date" render={({ field }) => (<DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />)} />
+                        </div>
+                    </div>
+                    <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} placeholder="Reason for transaction" /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1"><Label>Account</Label>
+                             <Controller name="accountId" control={transactionForm.control} render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                    <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                        </div>
+                         <div className="space-y-1"><Label>Business Profile</Label>
+                             <Controller name="via" control={transactionForm.control} render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                        </div>
+                    </div>
+                    <DialogFooter><Button type="submit">Save Transaction</Button></DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+
         <header className="bg-background border-b sticky top-0 z-20 shadow-sm no-print">
             <div className="container mx-auto px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
@@ -134,8 +230,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <div><h1 className="text-sm font-bold truncate max-w-[150px]">{party.name}</h1><p className="text-[10px] text-muted-foreground">{party.phone || 'No Phone'}</p></div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600" asChild><a href={`https://wa.me/${party.phone?.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer"><MessageSquare className="h-4 w-4" /></a></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" asChild><a href={`tel:${party.phone}`}><Phone className="h-4 w-4" /></a></Button>
+                         <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-2"/> Print</Button>
                     </div>
                 </div>
                 <div className="mt-2">
@@ -149,7 +244,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
         </header>
 
-        <main className="container mx-auto p-3 flex-1 overflow-auto pb-24">
+        <main className="container mx-auto p-3 flex-1 overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2 h-auto p-1 bg-gray-100 dark:bg-gray-800 rounded-lg mb-2">
                 <TabsTrigger value="transactions" className="text-xs">Transactions</TabsTrigger>
@@ -217,6 +312,27 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </TabsContent>
           </Tabs>
         </main>
+
+        <footer className="fixed bottom-0 left-0 right-0 z-30 bg-background border-t p-3 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] no-print">
+            <div className="container mx-auto flex gap-3 max-w-4xl">
+                <div className="grid grid-cols-2 gap-3 w-full">
+                    <Button 
+                        size="lg" 
+                        className="h-12 bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm"
+                        onClick={() => { setFormType('give'); transactionForm.setValue('type', 'give'); setIsFormOpen(true); }}
+                    >
+                        <ArrowUp className="mr-2 h-5 w-5" /> I Gave (৳)
+                    </Button>
+                    <Button 
+                        size="lg" 
+                        className="h-12 bg-green-600 hover:bg-green-700 text-white font-bold shadow-sm"
+                        onClick={() => { setFormType('receive'); transactionForm.setValue('type', 'receive'); setIsFormOpen(true); }}
+                    >
+                        <ArrowDown className="mr-2 h-5 w-5" /> I Received (৳)
+                    </Button>
+                </div>
+            </div>
+        </footer>
     </div>
   );
 }
