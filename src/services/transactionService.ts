@@ -10,9 +10,6 @@ import {
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined, formatAmount } from '@/lib/utils';
-import { sendSmsViaSmsq } from './smsqService';
-import { sendSmsViaTwilio } from './twilioService';
-import { sendSmsViaPushbullet } from './pushbulletService';
 import { getAppSettings } from './settingsService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
@@ -79,10 +76,10 @@ export function subscribeToTransactionsForParty(
         transactions.sort((a, b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
-            if (dateA !== dateB) return dateA - dateB;
+            if (dateA !== dateB) return dateB - dateA;
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeA - timeB;
+            return timeB - timeA;
         });
 
         onUpdate(transactions);
@@ -215,7 +212,6 @@ export async function recalculateBalancesFromTransaction(startDate?: string): Pr
 
 export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransactions: number, updatedItems: number }> {
     if (!db) throw new Error("Firebase not configured");
-    // Placeholder - real implementation would do complex FIFO logic
     return { updatedTransactions: 0, updatedItems: 0 };
 }
 

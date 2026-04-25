@@ -10,14 +10,14 @@ import { subscribeToAccounts } from '@/services/accountService';
 import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction } from '@/services/transactionService';
 import { getAppSettings } from '@/services/settingsService';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -30,7 +30,7 @@ import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
 import { format as formatFns } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -68,7 +68,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [activeTab, setActiveTab] = useState("transactions");
   
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [formType, setFormType] = useState<'give' | 'receive'>('give');
+  const [formType, setFormType] = useState<'give' | 'receive' | 'spent' | 'credit_give' | 'credit_income'>('give');
+  const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
+  const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const transactionForm = useForm<FormValues>({
@@ -94,7 +96,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         }
       });
       getAppSettings().then(setAppSettings);
-      const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
+      const unsubTx = subscribeToTransactionsForParty(partyId, (data) => setTransactions(data), (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
       const unsubAcc = subscribeToAccounts(setAccounts, console.error);
       
       const timer = setTimeout(() => setLoading(false), 500);
@@ -138,7 +140,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(a.date).getTime());
+    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime());
 
     return { 
         groupedTransactions: groupedArray, 
@@ -182,15 +184,78 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
   };
 
+  const openReceiveForm = (type: 'receive' | 'credit_income' | 'advance') => {
+      setFormType('receive');
+      transactionForm.setValue('type', type === 'advance' ? 'receive' : type);
+      if (type === 'advance') {
+          transactionForm.setValue('description', 'Advance Receive');
+      } else {
+          transactionForm.setValue('description', '');
+      }
+      setIsReceiveOptionsOpen(false);
+      setIsFormOpen(true);
+  }
+
+  const openGiveForm = (type: 'give' | 'credit_give') => {
+      setFormType('give');
+      transactionForm.setValue('type', type);
+      transactionForm.setValue('description', '');
+      setIsGiveOptionsOpen(false);
+      setIsFormOpen(true);
+  }
+
   if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
+        {/* Type Selection Dialogs */}
+        <Dialog open={isReceiveOptionsOpen} onOpenChange={setIsReceiveOptionsOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Select "Receive" Type</DialogTitle>
+                    <DialogDescription>Choose how you received the money or goods.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('receive')}>
+                        <div className="p-2 bg-green-100 rounded-full"><Wallet className="h-6 w-6 text-green-600"/></div>
+                        <div className="text-left"><p className="font-bold">Receive Payment</p><p className="text-xs text-muted-foreground">Cash/Bank entry for existing due</p></div>
+                    </Button>
+                    <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('credit_income')}>
+                        <div className="p-2 bg-purple-100 rounded-full"><HandCoins className="h-6 w-6 text-purple-600"/></div>
+                        <div className="text-left"><p className="font-bold">Credit Income (Due)</p><p className="text-xs text-muted-foreground">Record income without cash entry</p></div>
+                    </Button>
+                    <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('advance')}>
+                        <div className="p-2 bg-blue-100 rounded-full"><ArrowDownToLine className="h-6 w-6 text-blue-600"/></div>
+                        <div className="text-left"><p className="font-bold">Advance Receive</p><p className="text-xs text-muted-foreground">Pre-payment for future business</p></div>
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isGiveOptionsOpen} onOpenChange={setIsGiveOptionsOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Select "Give" Type</DialogTitle>
+                    <DialogDescription>Choose the type of payment or due record.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openGiveForm('give')}>
+                        <div className="p-2 bg-red-100 rounded-full"><Wallet className="h-6 w-6 text-red-600"/></div>
+                        <div className="text-left"><p className="font-bold">Give (Paid)</p><p className="text-xs text-muted-foreground">Cash/Bank payment to party</p></div>
+                    </Button>
+                    <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openGiveForm('credit_give')}>
+                        <div className="p-2 bg-orange-100 rounded-full"><HandCoins className="h-6 w-6 text-orange-600"/></div>
+                        <div className="text-left"><p className="font-bold">Credit Give (Due)</p><p className="text-xs text-muted-foreground">Record due without cash entry</p></div>
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogContent>
-                <DialogHeader><DialogTitle>Record {formType === 'give' ? 'I Gave' : 'I Received'}</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Record {formType === 'give' ? 'Payment Given' : 'Payment Received'}</DialogTitle></DialogHeader>
                 <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1"><Label>Amount</Label><Input type="number" step="0.01" {...transactionForm.register('amount')} autoFocus /></div>
@@ -200,14 +265,16 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     </div>
                     <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} placeholder="Reason for transaction" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1"><Label>Account</Label>
-                             <Controller name="accountId" control={transactionForm.control} render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
-                                    <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
-                                </Select>
-                            )} />
-                        </div>
+                        {!['credit_give', 'credit_income'].includes(transactionForm.watch('type')) && (
+                            <div className="space-y-1"><Label>Account</Label>
+                                <Controller name="accountId" control={transactionForm.control} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                        <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                )} />
+                            </div>
+                        )}
                          <div className="space-y-1"><Label>Business Profile</Label>
                              <Controller name="via" control={transactionForm.control} render={({ field }) => (
                                 <Select onValueChange={field.onChange} value={field.value}>
@@ -320,14 +387,14 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     <Button 
                         size="lg" 
                         className="h-12 bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm"
-                        onClick={() => { setFormType('give'); transactionForm.setValue('type', 'give'); setIsFormOpen(true); }}
+                        onClick={() => setIsGiveOptionsOpen(true)}
                     >
                         <ArrowUp className="mr-2 h-5 w-5" /> I Gave (৳)
                     </Button>
                     <Button 
                         size="lg" 
                         className="h-12 bg-green-600 hover:bg-green-700 text-white font-bold shadow-sm"
-                        onClick={() => { setFormType('receive'); transactionForm.setValue('type', 'receive'); setIsFormOpen(true); }}
+                        onClick={() => setIsReceiveOptionsOpen(true)}
                     >
                         <ArrowDown className="mr-2 h-5 w-5" /> I Received (৳)
                     </Button>
