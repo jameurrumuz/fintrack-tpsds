@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, FileText, CalendarCheck, Package, Trash2, Edit, Send } from 'lucide-react';
+import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, Pin, PinOff, MessageSquarePlus as MessageSquarePlusIcon, Send } from 'lucide-react';
 import type { Party, Transaction, AppSettings, SmsLog, SmsTemplate, SmsPackage } from '@/types';
 import { subscribeToParties } from '@/services/partyService';
 import { subscribeToAllTransactions } from '@/services/transactionService';
@@ -209,7 +209,7 @@ export default function SmsReminderPage() {
 
   useEffect(() => {
     const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: 'destructive', title: 'Error fetching parties', description: err.message }));
-    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'Error fetching transactions', description: err.message }));
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
     
     const unsubSmsLogs = subscribeToSmsLogs((logs) => {
         setSmsLogs(logs);

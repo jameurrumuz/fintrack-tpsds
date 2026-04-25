@@ -53,7 +53,7 @@ export default function BillingPage() {
 
 
   useEffect(() => {
-    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'Error fetching transactions', description: err.message }));
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
     const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: 'destructive', title: 'Error fetching parties', description: err.message }));
     const unsubAccounts = subscribeToAccounts(setAccounts, (err) => toast({ variant: 'destructive', title: 'Error fetching accounts', description: err.message }));
     
@@ -211,7 +211,7 @@ export default function BillingPage() {
                         </div>
                         <div className="space-y-1"><Label>Delivery Status</Label>
                              <Select value={filters.deliveryStatus} onValueChange={v => setFilters({...filters, deliveryStatus: v})}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent>
                             </Select>
                         </div>
@@ -292,7 +292,7 @@ export default function BillingPage() {
              <Card>
                 <CardHeader>
                     <div className="flex justify-between items-center">
-                        <div>
+                        <div className="space-y-1">
                             <CardTitle>Quotations</CardTitle>
                             <CardDescription>Manage all your price quotations.</CardDescription>
                         </div>

@@ -128,7 +128,7 @@ export default function OrderManagementPage() {
 
 
   useEffect(() => {
-    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'Error fetching transactions', description: err.message }));
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
     const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: 'destructive', title: 'Error fetching parties', description: err.message }));
     const unsubAccounts = subscribeToAccounts(setAccounts, (err) => toast({ variant: 'destructive', title: 'Error fetching accounts', description: err.message }));
     
@@ -219,7 +219,7 @@ export default function OrderManagementPage() {
 
   const handleUpdateStatus = async (id: string, status: 'pending' | 'delivered' | 'cancelled') => {
       try {
-          await updateTransaction(id, { status });
+          await updateTransaction(id, status);
           toast({ title: 'Success', description: `Order status updated to ${status}.`});
       } catch (error: any) {
            toast({ variant: 'destructive', title: 'Error', description: `Could not update status: ${error.message}` });

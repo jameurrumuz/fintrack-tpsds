@@ -35,7 +35,7 @@ export default function CashFlowReport() {
   useEffect(() => {
     setLoading(true);
     const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => {
-        toast({ variant: 'destructive', title: 'Error fetching transactions', description: err.message });
+        toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message });
         setLoading(false);
     });
     const unsubAccounts = subscribeToAccounts(setAccounts, (err) => {

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -46,7 +45,7 @@ export default function ContactsPage() {
 
   useEffect(() => {
     const unsubParties = subscribeToParties(setParties, (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
-    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'Error fetching transactions' }));
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও' }));
     const unsubNotes = subscribeToNotes(setNotes, (err) => toast({ variant: 'destructive', title: 'Error fetching notes' }));
     const unsubReminders = subscribeToReminders(setReminders, (err) => {
         const pinned = err.message.split(',').filter(Boolean); // Assuming error message is a comma-separated list of IDs for now
@@ -275,6 +274,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-
-
