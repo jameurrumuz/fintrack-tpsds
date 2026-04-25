@@ -252,14 +252,14 @@ function AccountLedgerPage({ params }: { params: Promise<{ accountId: string }> 
                 <Label>From</Label>
                 <DatePicker 
                   value={filters.dateFrom ? parseISO(filters.dateFrom) : undefined}
-                  onChange={(date) => setFilters({...filters, dateFrom: date ? formatFns(date, 'yyyy-MM-dd') : ''})}
+                  onChange={(date) => setFilters({...filters, dateFrom: date ? formatFns(date as Date, 'yyyy-MM-dd') : ''})}
                 />
               </div>
               <div className="space-y-1 flex-grow">
                 <Label>To</Label>
                 <DatePicker 
                   value={filters.dateTo ? parseISO(filters.dateTo) : undefined}
-                  onChange={(date) => setFilters({...filters, dateTo: date ? formatFns(date, 'yyyy-MM-dd') : ''})}
+                  onChange={(date) => setFilters({...filters, dateTo: date ? formatFns(date as Date, 'yyyy-MM-dd') : ''})}
                 />
               </div>
             </div>

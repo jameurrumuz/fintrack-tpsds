@@ -9,7 +9,6 @@ import {
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined } from '@/lib/utils';
-import { handleSmsNotification } from './possmsnotificationService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
 
@@ -20,7 +19,8 @@ export function subscribeToAllTransactions(
   const collectionRef = getTransactionsCollection();
   if (!collectionRef) return () => {};
 
-  const q = query(collectionRef, orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+  // Simple query to avoid composite index requirements
+  const q = query(collectionRef);
   
   return onSnapshot(q, (snapshot) => {
     const transactions = snapshot.docs.map(doc => {
@@ -31,8 +31,23 @@ export function subscribeToAllTransactions(
         createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
       } as Transaction;
     });
+
+    // Client-side sorting to avoid Firestore index errors
+    transactions.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+        
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+    });
+
     onUpdate(transactions);
-  }, (error) => onError(error as Error));
+  }, (error) => {
+      console.error("Subscription error:", error);
+      onError(error as Error);
+  });
 }
 
 export function subscribeToTransactionsForParty(
@@ -54,6 +69,17 @@ export function subscribeToTransactionsForParty(
                 createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
             } as Transaction;
         });
+
+        // Client-side sorting
+        transactions.sort((a, b) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            if (dateA !== dateB) return dateB - dateA;
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+
         onUpdate(transactions);
     }, (error) => onError(error as Error));
 }
@@ -267,10 +293,20 @@ export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransacti
     let updatedItemsCount = 0;
 
     const inventorySnap = await getDocs(collection(db, 'inventory'));
-    const allTransactionsSnap = await getDocs(query(collection(db, 'transactions'), orderBy('date', 'asc'), orderBy('createdAt', 'asc')));
+    const allTransactionsSnap = await getDocs(query(collection(db, 'transactions')));
     
     const inventory = inventorySnap.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem));
     const allTransactionsList = allTransactionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+
+    // Sort transactions oldest first for FIFO
+    allTransactionsList.sort((a,b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+    });
 
     const itemQueues: Map<string, { cost: number, quantity: number, date: string }[]> = new Map();
     
