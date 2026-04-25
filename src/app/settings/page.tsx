@@ -499,7 +499,7 @@ const setPinInStorage = (newPin: string) => {
     localStorage.setItem(PIN_STORAGE_KEY, newPin);
 };
 
-const ChangePinDialog = ({ onOpenChange }: { onOpenChange: (open: boolean) => void }) => {
+const ChangePinDialog = ({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) => {
     const [currentPin, setCurrentPin] = useState('');
     const [newPin, setNewPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
@@ -528,33 +528,35 @@ const ChangePinDialog = ({ onOpenChange }: { onOpenChange: (open: boolean) => vo
     };
 
     return (
-        <DialogContent>
-            <DialogHeader>
-                <DialogTitle>Change Security PIN</DialogTitle>
-                <DialogDescription>Enter your current PIN and set a new one.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                    <Label htmlFor="currentPin">Current PIN</Label>
-                    <Input id="currentPin" type="password" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Change Security PIN</DialogTitle>
+                    <DialogDescription>Enter your current PIN and set a new one.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="currentPin">Current PIN</Label>
+                        <Input id="currentPin" type="password" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="newPin">New PIN</Label>
+                        <Input id="newPin" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="confirmPin">Confirm New PIN</Label>
+                        <Input id="confirmPin" type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
+                    </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
                 </div>
-                <div className="space-y-2">
-                    <Label htmlFor="newPin">New PIN</Label>
-                    <Input id="newPin" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="confirmPin">Confirm New PIN</Label>
-                    <Input id="confirmPin" type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} maxLength={4} autoComplete="one-time-code" />
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
-            <DialogFooter>
-                 <DialogClose asChild>
-                    <Button type="button" variant="ghost">Cancel</Button>
-                </DialogClose>
-                <Button onClick={handleChangePin}>Change PIN</Button>
-            </DialogFooter>
-        </DialogContent>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="ghost">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleChangePin}>Change PIN</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
 
