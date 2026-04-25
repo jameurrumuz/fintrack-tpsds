@@ -10,7 +10,8 @@ const nextConfig = {
     '6000-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
     '9000-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
     '9002-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
-    'localhost:3000'
+    'localhost:3000',
+    '*.cloudworkstations.dev'
   ],
 
   images: {
@@ -27,7 +28,8 @@ const nextConfig = {
         '6000-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
         '9000-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
         '9002-firebase-studio-1751357598651.cluster-bg6uurscprhn6qxr6xwtrhvkf6.cloudworkstations.dev',
-        'localhost:3000'
+        'localhost:3000',
+        '*.cloudworkstations.dev'
       ]
     }
   },
