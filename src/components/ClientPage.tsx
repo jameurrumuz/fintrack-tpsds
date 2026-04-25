@@ -52,26 +52,6 @@ export interface Sort {
 type FirebaseStatus = 'initializing' | 'not_configured' | 'connecting' | 'connected' | 'error';
 type FirebaseErrorType = 'unavailable' | 'other';
 
-// --- Sample Data for Demo ---
-const sampleParties: Party[] = [
-  { id: 'sample-party-1', name: 'City Groceries', balance: 0, phone: '555-0101', address: '123 Market St' },
-  { id: 'sample-party-2', name: 'Tech Solutions Inc.', balance: 0, phone: '555-0102', address: '456 Tech Park' },
-];
-
-const sampleTransactions: Transaction[] = [
-    { id: 'sample-tx-1', date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], description: 'Initial Salary', amount: 50000, type: 'income', accountId: 'bank', enabled: true },
-    { id: 'sample-tx-2', date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], description: 'Office Rent', amount: 15000, type: 'spent', accountId: 'bank', enabled: true },
-    { id: 'sample-tx-3', date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], description: 'Groceries', amount: 2500, type: 'purchase', accountId: 'cash', enabled: true, partyId: 'sample-party-1' },
-    { id: 'sample-tx-4', date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], description: 'Project Advance', amount: 10000, type: 'receive', accountId: 'bank', enabled: true, partyId: 'sample-party-2' },
-    { id: 'sample-tx-5', date: new Date().toISOString().split('T')[0], description: 'Lunch meeting', amount: 1200, type: 'spent', accountId: 'cash', enabled: false },
-];
-const sampleAccounts: Account[] = [
-    { id: 'cash', name: 'Cash', balance: 31300 },
-    { id: 'bank', name: 'Bank Account', balance: 45000 },
-];
-// ----------------------------
-
-
 const FirebaseStatusIndicator = ({ status }: { status: FirebaseStatus }) => {
   const statusInfo = {
     initializing: { text: "Initializing...", icon: <Loader2 className="animate-spin" />, variant: "outline" as const },
@@ -146,26 +126,9 @@ export default function ClientPage() {
   };
 
   useEffect(() => {
-    const loadSampleDataAndToast = (reason: 'not_configured' | 'error') => {
-        const title = reason === 'not_configured' ? "Firebase Not Configured" : "Firebase Connection Error";
-        if (reason === 'error') {
-            toast({
-                variant: 'destructive',
-                title: title,
-                description: "Displaying sample data. Changes will not be saved.",
-            });
-        }
-        setTransactions(sampleTransactions);
-        setAllTransactions(sampleTransactions);
-        setParties(sampleParties);
-        setAccounts(sampleAccounts);
-        getAppSettings().then(setAppSettings);
-        setLoading(false);
-    };
-    
     if (!db) {
         setFirebaseStatus('not_configured');
-        loadSampleDataAndToast('not_configured');
+        setLoading(false);
         return;
     }
 
@@ -180,40 +143,29 @@ export default function ClientPage() {
         } else {
             setFirebaseErrorType('other');
         }
-        loadSampleDataAndToast('error');
+        setLoading(false);
     };
 
-    let initialLoad = true;
-    const onTransactionsUpdate = (latestTransactions: Transaction[]) => {
-        if (initialLoad && latestTransactions.length === 0) {
-           console.log("Successfully connected to Firebase. Your database is empty. Add a new transaction to get started.");
-        }
+    const unsubscribeTransactions = subscribeToAllTransactions((latestTransactions) => {
         setAllTransactions(latestTransactions);
         setTransactions(latestTransactions); 
-        if (firebaseStatus !== 'connected') {
-            setFirebaseStatus('connected');
-        }
-        setLoading(false);
-        initialLoad = false;
+        setFirebaseStatus('connected');
         setFirebaseErrorType(null);
-    };
+        setLoading(false);
+    }, (e) => onSubscriptionError(e, 'transactions'));
     
-    const onPartiesUpdate = (latestParties: Party[]) => {
+    const unsubscribeParties = subscribeToParties((latestParties) => {
         setParties(latestParties);
-    };
+    }, (e) => onSubscriptionError(e, 'parties'));
 
-    const onAccountsUpdate = (latestAccounts: Account[]) => {
+    const unsubscribeAccounts = subscribeToAccounts((latestAccounts) => {
         setAccounts(latestAccounts);
-    }
-    
-    const onInventoryUpdate = (latestItems: InventoryItem[]) => {
+    }, (e) => onSubscriptionError(e, 'accounts'));
+
+    const unsubscribeInventory = subscribeToInventoryItems((latestItems) => {
         setInventoryItems(latestItems);
-    }
-    
-    const unsubscribeTransactions = subscribeToAllTransactions(onTransactionsUpdate, (e) => onSubscriptionError(e, 'transactions'));
-    const unsubscribeParties = subscribeToParties(onPartiesUpdate, (e) => onSubscriptionError(e, 'parties'));
-    const unsubscribeAccounts = subscribeToAccounts(onAccountsUpdate, (e) => onSubscriptionError(e, 'accounts'));
-    const unsubscribeInventory = subscribeToInventoryItems(onInventoryUpdate, (e) => onSubscriptionError(e, 'inventory'));
+    }, (e) => onSubscriptionError(e, 'inventory'));
+
     getAppSettings().then(setAppSettings);
 
     return () => {
@@ -234,19 +186,6 @@ export default function ClientPage() {
   }, []);
 
   const handleAddTransaction = async (data: Omit<Transaction, 'id' | 'enabled'>[], mode: 'saveAndClose' | 'saveAndNext') => {
-    if (firebaseStatus !== 'connected') {
-        data.forEach(d => {
-            const newTransaction: Transaction = {
-                ...d,
-                id: `local-${Date.now()}-${Math.random()}`,
-                enabled: true,
-            };
-            setTransactions(prev => [newTransaction, ...prev]);
-            setAllTransactions(prev => [newTransaction, ...prev]);
-        });
-        toast({ title: "Sample transaction(s) added", description: "This is for demonstration and will not be saved." });
-        return;
-    }
     try {
       for (const transactionData of data) {
           await addTransaction(transactionData);
@@ -257,7 +196,7 @@ export default function ClientPage() {
       }
     } catch (error) {
       console.error("Failed to add transaction(s)", error);
-      toast({ variant: 'destructive', title: "Error", description: "Could not add transaction(s). Is Firebase configured?" });
+      toast({ variant: 'destructive', title: "Error", description: "Could not add transaction(s)." });
     }
   };
   
@@ -267,14 +206,6 @@ export default function ClientPage() {
   
   const handleUpdateTransaction = async (data: Omit<Transaction, 'id' | 'enabled'>) => {
       if (!editingTransaction) return;
-      if (firebaseStatus !== 'connected') {
-          const updater = (prev: Transaction[]) => prev.map(t => t.id === editingTransaction.id ? { ...t, ...data, enabled: t.enabled, id: t.id } : t)
-          setTransactions(updater);
-          setAllTransactions(updater);
-          toast({ title: "Sample transaction updated" });
-          setEditingTransaction(null);
-          return;
-      }
       try {
         await updateTransaction(editingTransaction.id, data);
         toast({ title: "Success", description: "Transaction updated successfully." });
@@ -296,13 +227,6 @@ export default function ClientPage() {
   };
   
   const handleToggleTransaction = async (id: string, enabled: boolean) => {
-    if (firebaseStatus !== 'connected') {
-        const updater = (prev: Transaction[]) => prev.map(t => t.id === id ? { ...t, enabled } : t);
-        setTransactions(updater);
-        setAllTransactions(updater);
-        toast({ title: "Sample transaction toggled", description: "This will not be saved." });
-        return;
-    }
     try {
       await toggleTransaction(id, enabled);
     } catch (error) {
@@ -312,12 +236,10 @@ export default function ClientPage() {
   };
   
   const { groupedTransactions, filteredIds, openingBalance } = useMemo(() => {
-    const transactionSource = firebaseStatus === 'connected' ? allTransactions : sampleTransactions;
-
     const firstDateInFilter = filters.dateFrom || '1970-01-01';
     
     let runningBalance = 0;
-    const allTransactionsWithBalance = [...transactionSource]
+    const allTransactionsWithBalance = [...allTransactions]
         .sort((a,b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
@@ -370,20 +292,12 @@ export default function ClientPage() {
         filteredIds: filteredIdsSet, 
         openingBalance: openingBalanceCalc,
     };
-  }, [allTransactions, filters, sort, firebaseStatus]);
+  }, [allTransactions, filters, sort]);
   
   const handleDeleteFiltered = async () => {
     if (filteredIds.size === 0) {
       toast({ variant: 'destructive', title: "No transactions to delete", description: "Your current filters do not match any transactions." });
       return;
-    }
-    
-    if (firebaseStatus !== 'connected') {
-        const updater = (prev: Transaction[]) => prev.filter(t => !filteredIds.has(t.id));
-        setTransactions(updater);
-        setAllTransactions(updater);
-        toast({ title: `Deleted ${filteredIds.size} sample transaction(s).`, description: "This will not be saved." });
-        return;
     }
   
     try {
@@ -413,78 +327,6 @@ export default function ClientPage() {
     }
   };
 
-  const handleDownloadBackup = () => {
-    const source = firebaseStatus === 'connected' ? allTransactions : transactions;
-    if (source.length === 0 && parties.length === 0) {
-      toast({ variant: 'destructive', title: "No data to backup", description: "There are no transactions or parties to include in the backup." });
-      return;
-    }
-
-    const backupData = {
-      transactions: source,
-      parties,
-      accounts,
-    };
-
-    const jsonString = JSON.stringify(backupData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const today = new Date().toISOString().split('T')[0];
-    
-    link.href = url;
-    link.download = `fin-plan-backup-${today}.json`;
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    URL.revokeObjectURL(url);
-    toast({ title: "Success", description: "Backup JSON file is being downloaded." });
-  };
-  
-  const handleShareBackup = async () => {
-    const source = firebaseStatus === 'connected' ? allTransactions : transactions;
-    if (source.length === 0 && parties.length === 0) {
-      toast({ variant: 'destructive', title: "No data to backup", description: "There are no transactions or parties to include in the backup." });
-      return;
-    }
-
-    const backupData = {
-      transactions: source,
-      parties,
-      accounts,
-    };
-
-    const jsonString = JSON.stringify(backupData, null, 2);
-    const today = new Date().toISOString().split('T')[0];
-    const fileName = `fin-plan-backup-${today}.json`;
-    const file = new File([jsonString], fileName, { type: 'application/json' });
-
-    try {
-        await navigator.share({
-          files: [file],
-          title: 'Fin Plan Backup',
-          text: `Fin Plan data backup from ${today}`,
-        });
-        toast({ title: "Success", description: "Backup shared successfully." });
-    } catch (error) {
-        console.error('Error sharing backup:', error);
-        if (error instanceof DOMException && error.name === 'AbortError') {
-            toast({
-                title: "Share Canceled",
-                description: "The share dialog was closed.",
-            });
-        } else {
-            toast({
-                variant: 'destructive',
-                title: "Share Failed",
-                description: "This browser may not support sharing files.",
-            });
-        }
-    }
-  };
-
   const handleRestoreClick = () => {
     fileInputRef.current?.click();
   };
@@ -494,9 +336,7 @@ export default function ClientPage() {
     if (!file) return;
 
     if (!window.confirm("Are you sure you want to restore from this backup? This will delete all current data and replace it with the data from the file. This action cannot be undone.")) {
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
     }
 
@@ -505,80 +345,29 @@ export default function ClientPage() {
     reader.onload = async (e) => {
         try {
             const text = e.target?.result;
-            if (typeof text !== 'string') {
-                throw new Error("Failed to read file.");
-            }
+            if (typeof text !== 'string') throw new Error("Failed to read file.");
             const data = JSON.parse(text);
-
-            if (!data.parties || !data.transactions || !data.accounts ||!Array.isArray(data.parties) || !Array.isArray(data.transactions) || !Array.isArray(data.accounts)) {
-                throw new Error("Invalid backup file format. The file must contain 'parties', 'transactions', and 'accounts' arrays.");
-            }
-
             await restoreData(data);
             toast({ title: "Success", description: "Data restored successfully." });
-        } catch (error) {
-            console.error("Failed to restore data", error);
-            const errorMessage = error instanceof Error ? error.message : "Could not restore data.";
-            toast({ variant: 'destructive', title: "Error", description: errorMessage });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: "Error", description: error.message });
         } finally {
             setIsRestoring(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
-    reader.onerror = () => {
-        toast({ variant: 'destructive', title: "Error", description: "Failed to read the backup file." });
-        setIsRestoring(false);
-    }
     reader.readAsText(file);
   };
   
-  const renderTransactionForm = () => (
-    <TransactionForm parties={parties} accounts={accounts} onAddTransaction={handleAddTransaction} appSettings={appSettings} />
-  );
-
   const todayBalances = useMemo(() => {
-    const source = firebaseStatus === 'connected' ? accounts : sampleAccounts;
-    return source.reduce((acc, account) => {
+    return accounts.reduce((acc, account) => {
         const lowerCaseName = account.name.toLowerCase();
-        if (lowerCaseName.includes('cash')) {
-            acc.cash += account.balance;
-        } else {
-            acc.bank += account.balance;
-        }
+        if (lowerCaseName.includes('cash')) acc.cash += account.balance;
+        else acc.bank += account.balance;
         acc.total += account.balance;
         return acc;
     }, { cash: 0, bank: 0, total: 0 });
-  }, [accounts, firebaseStatus]);
-  
-  const stockInfo = useMemo(() => {
-    if (filters.via === 'all' || !appSettings) return null;
-    
-    const profile = appSettings.businessProfiles.find(p => p.name === filters.via);
-    if (!profile || !profile.location) return null;
-    
-    const locationName = profile.location;
-    let locationStockValue = 0;
-    let totalStockValue = 0;
-
-    inventoryItems.forEach(item => {
-        const locationQty = item.stock?.[locationName] || 0;
-        locationStockValue += locationQty * item.cost;
-        totalStockValue += item.quantity * item.cost;
-    });
-
-    return {
-        title: `${profile.name} Stock`,
-        balances: {
-            cash: locationStockValue,
-            bank: totalStockValue,
-            total: totalStockValue - locationStockValue,
-        },
-        icon: Archive
-    };
-  }, [filters.via, inventoryItems, appSettings]);
-
+  }, [accounts]);
 
   return (
     <>
@@ -602,84 +391,24 @@ export default function ClientPage() {
           accounts={accounts}
           allTransactions={allTransactions}
         />
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="application/json"
-          className="hidden"
-        />
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/json" className="hidden" />
+        
         <div className="flex flex-wrap items-center gap-4 mb-6">
           <FirebaseStatusIndicator status={firebaseStatus} />
           <div className="flex-grow">
-            {stockInfo ? (
-                <BalanceSummary title={stockInfo.title} balances={stockInfo.balances} />
-            ) : (
-                <BalanceSummary title="Today's Balance" balances={todayBalances} />
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => window.print()} variant="outline"><Printer className="mr-2 h-4 w-4" /> Print History</Button>
-            <Button onClick={handleDownloadBackup} variant="outline" disabled={firebaseStatus !== 'connected'}><Download className="mr-2 h-4 w-4" /> Download Backup</Button>
-            {canShare && (
-              <Button onClick={handleShareBackup} variant="outline" disabled={firebaseStatus !== 'connected'}><Share2 className="mr-2 h-4 w-4" /> Share Backup</Button>
-            )}
-            <Button onClick={handleRestoreClick} variant="outline" disabled={firebaseStatus !== 'connected' || isRestoring}>
-              {isRestoring ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              Restore Backup
-            </Button>
+            <BalanceSummary title="Today's Balance" balances={todayBalances} />
           </div>
         </div>
-        
-        {firebaseStatus === 'not_configured' && (
-          <Alert variant="destructive" className="mb-6">
-            <Terminal className="h-4 w-4" />
-            <AlertTitle>Action Required: Firebase Not Configured</AlertTitle>
-            <AlertDescription>
-              <p>Your application is running in offline mode with sample data.</p>
-              <p>To connect to your database and save your data, please follow these steps:</p>
-              <ol className="list-decimal list-inside mt-2 space-y-1">
-                <li>Create a file named <strong>.env.local</strong> in the root directory of the project.</li>
-                <li>Copy the content from <strong>.env.example</strong> and paste it into <strong>.env.local</strong>.</li>
-                <li>Replace the placeholder values with your actual Firebase project credentials.</li>
-              </ol>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {firebaseStatus === 'error' && firebaseErrorType === 'unavailable' && (
-           <Alert variant="destructive" className="mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>ফায়ারবেস সেটআপ প্রয়োজন (Firebase Setup Required)</AlertTitle>
-            <AlertDescription>
-              <p className="font-bold">আপনার অ্যাপটি ডেটাবেসের সাথে সংযোগ করতে পারছে না।</p>
-              <p className="mt-1">এর কারণ হতে পারে আপনার ফায়ারবেস প্রজেক্টে এখনও ডাটাবেসটি তৈরি করা হয়নি বা নিরাপত্তা নিয়মাবলী (Security Rules) ঠিকভাবে সেট করা নেই। অথবা, আপনার `.env.local` ফাইলে দেওয়া ক্রেডেনশিয়ালগুলো সঠিক নয়।</p>
-              <p className="mt-2">অনুগ্রহ করে নিচের গাইডটি অনুসরণ করে আপনার ডেটাবেস সেটআপ সম্পন্ন করুন। এটি একটি এককালীন প্রক্রিয়া।</p>
-               <Button asChild variant="secondary" className="mt-3">
-                    <a href="/explanation.html" target="_blank" rel="noopener noreferrer">
-                        সেটআপ গাইড দেখুন (View Setup Guide)
-                    </a>
-                </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
         
         {isMobile ? (
           <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogContent>
-               <DialogHeader>
-                  <DialogTitle>Add New Transaction</DialogTitle>
-                </DialogHeader>
-              {renderTransactionForm()}
+               <DialogHeader><DialogTitle>Add New Transaction</DialogTitle></DialogHeader>
+               <TransactionForm parties={parties} accounts={accounts} onAddTransaction={handleAddTransaction} appSettings={appSettings} />
             </DialogContent>
           </Dialog>
         ) : (
-          renderTransactionForm()
+          <TransactionForm parties={parties} accounts={accounts} onAddTransaction={handleAddTransaction} appSettings={appSettings} />
         )}
         
         <h2 className="text-2xl font-semibold mb-4 mt-8 text-gray-800 dark:text-gray-200">Transaction History</h2>
@@ -714,12 +443,7 @@ export default function ClientPage() {
         )}
        {isMobile && (
         <div className="fixed bottom-24 right-6 z-50">
-          <Button 
-            className="h-14 w-14 rounded-full shadow-lg"
-            onClick={() => setIsFormOpen(true)}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
+          <Button className="h-14 w-14 rounded-full shadow-lg" onClick={() => setIsFormOpen(true)}><Plus className="h-6 w-6" /></Button>
         </div>
       )}
     </>
