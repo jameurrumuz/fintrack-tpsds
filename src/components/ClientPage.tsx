@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { Party, Transaction, Account, AppSettings, InventoryItem } from '@/types';
 import TransactionForm from '@/components/TransactionForm';
 import TransactionTable, { type GroupedTransaction } from '@/components/TransactionTable';

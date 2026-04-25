@@ -16,23 +16,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { cn, formatAmount, formatDate, getPartyBalanceEffect } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, MoreVertical, Edit, Trash2, ShoppingCart, RefreshCcw, Landmark, Briefcase, MessageSquare, Phone, ArrowDown, ArrowUp } from 'lucide-react';
+import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, MessageSquare, Phone, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
-import { SidebarInset } from '@/components/ui/sidebar';
-import { format as formatFns, parseISO, isPast, addMonths, addDays } from 'date-fns';
-import { DatePicker } from '@/components/ui/date-picker';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
-import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
-import InvoiceDialog from '@/components/pos/InvoiceDialog';
 
 function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { partyId } = use(params);
@@ -57,7 +49,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         if (snap.exists()) setParty({ id: snap.id, ...snap.data() } as Party);
       });
       getAppSettings().then(setAppSettings);
-      const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, console.error);
+      const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
       const unsubAcc = subscribeToAccounts(setAccounts, console.error);
       
       const timer = setTimeout(() => setLoading(false), 500);
@@ -130,7 +122,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
-    <SidebarInset className="flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
         <header className="bg-background border-b sticky top-0 z-20 shadow-sm no-print">
@@ -169,7 +161,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-xs">Date</TableHead>
-                          <TableHead className="text-xs">Description</TableHead>
+                          <TableHead>Description</TableHead>
                           <TableHead className="text-right text-xs">Dr</TableHead>
                           <TableHead className="text-right text-xs">Cr</TableHead>
                           <TableHead className="text-right text-xs">Balance</TableHead>
@@ -225,7 +217,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </TabsContent>
           </Tabs>
         </main>
-    </SidebarInset>
+    </div>
   );
 }
 
