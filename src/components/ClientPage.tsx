@@ -188,7 +188,6 @@ export default function ClientPage() {
         if (initialLoad && latestTransactions.length === 0) {
            console.log("Successfully connected to Firebase. Your database is empty. Add a new transaction to get started.");
         }
-        // This subscription now fetches all transactions, so it can be our source of truth.
         setAllTransactions(latestTransactions);
         setTransactions(latestTransactions); 
         if (firebaseStatus !== 'connected') {
@@ -288,7 +287,6 @@ export default function ClientPage() {
 
   const handleDeleteTransaction = async (id: string) => {
     try {
-      // "Deleting" from the main UI now means disabling the transaction (soft delete)
       await toggleTransaction(id, false);
       toast({ title: "Transaction Disabled", description: "The transaction has been disabled and can be restored from the Activity Log." });
     } catch (error) {
@@ -318,14 +316,12 @@ export default function ClientPage() {
 
     const firstDateInFilter = filters.dateFrom || '1970-01-01';
     
-    // 1. Calculate running balances on ALL transactions first.
     let runningBalance = 0;
     const allTransactionsWithBalance = [...transactionSource]
         .sort((a,b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
             if (dateA !== dateB) return dateA - dateB;
-            // If dates are the same, sort by creation time
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return timeA - timeB;
@@ -335,12 +331,10 @@ export default function ClientPage() {
             return { ...t, closingBalance: runningBalance };
         });
 
-    // 2. Determine opening balance based on the date filter.
     const openingBalanceCalc = allTransactionsWithBalance
         .filter(t => t.date < firstDateInFilter && t.enabled)
         .pop()?.closingBalance || 0;
         
-    // 3. Filter the transactions for display.
     const filteredTransactions = allTransactionsWithBalance.filter(t => {
       if (filters.type !== 'all' && t.type !== filters.type) return false;
       if (filters.accountId !== 'all' && t.accountId !== filters.accountId) return false;
@@ -358,7 +352,6 @@ export default function ClientPage() {
 
     const filteredIdsSet = new Set(filteredTransactions.map(t => t.id));
     
-    // 4. Group the filtered transactions by date.
     const grouped: { [date: string]: GroupedTransaction } = {};
     filteredTransactions.forEach(t => {
       if (!grouped[t.date]) {

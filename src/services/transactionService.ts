@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -240,6 +239,26 @@ export async function recalculateBalancesFromTransaction(startDate?: string): Pr
     await recalculateAllPartyBalances();
 }
 
+function calculateFifoCost(queue: { cost: number, quantity: number }[], sellQty: number) {
+    let remainingToSell = sellQty;
+    let totalCost = 0;
+
+    while (remainingToSell > 0 && queue.length > 0) {
+        const batch = queue[0];
+        if (batch.quantity <= remainingToSell) {
+            totalCost += batch.quantity * batch.cost;
+            remainingToSell -= batch.quantity;
+            queue.shift(); 
+        } else {
+            totalCost += remainingToSell * batch.cost;
+            batch.quantity -= remainingToSell;
+            remainingToSell = 0;
+        }
+    }
+
+    return { totalCost, remainingToSell };
+}
+
 export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransactions: number, updatedItems: number }> {
     if (!db) throw new Error("Firebase not configured");
 
@@ -314,26 +333,6 @@ export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransacti
     }
 
     return { updatedTransactions: updatedTransactionsCount, updatedItems: updatedItemsCount };
-}
-
-function calculateFifoCost(queue: { cost: number, quantity: number }[], sellQty: number) {
-    let remainingToSell = sellQty;
-    let totalCost = 0;
-
-    while (remainingToSell > 0 && queue.length > 0) {
-        const batch = queue[0];
-        if (batch.quantity <= remainingToSell) {
-            totalCost += batch.quantity * batch.cost;
-            remainingToSell -= batch.quantity;
-            queue.shift(); 
-        } else {
-            totalCost += remainingToSell * batch.cost;
-            batch.quantity -= remainingToSell;
-            remainingToSell = 0;
-        }
-    }
-
-    return { totalCost, remainingToSell };
 }
 
 export function subscribeToPendingPayments(onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
