@@ -23,7 +23,6 @@ export function subscribeToAllTransactions(
   const collectionRef = getTransactionsCollection();
   if (!collectionRef) return () => {};
 
-  // Simple query to avoid composite index requirements. Sorting is handled on the client side.
   const q = query(collectionRef);
   
   return onSnapshot(q, (snapshot) => {
@@ -36,7 +35,6 @@ export function subscribeToAllTransactions(
       } as Transaction;
     });
 
-    // Client-side sorting: date descending, then createdAt descending
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -74,7 +72,6 @@ export function subscribeToTransactionsForParty(
             } as Transaction;
         });
 
-        // Client-side sorting
         transactions.sort((a, b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
@@ -316,7 +313,6 @@ export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransacti
     const inventory = inventorySnap.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem));
     const allTransactionsList = allTransactionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
 
-    // Sort transactions oldest first for FIFO
     allTransactionsList.sort((a,b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();

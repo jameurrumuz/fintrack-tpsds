@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import * as React from 'react';
@@ -38,7 +36,7 @@ import {
   Zap,
   MoreVertical,
   Eye,
-  RefreshCcw, // Import new icon
+  RefreshCcw,
 } from 'lucide-react';
 import { transactionTypeOptions } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -161,7 +159,7 @@ export default function TransactionTable({ groupedTransactions, accounts, partie
         </TableHeader>
         <TableBody>
           {isDateFilterActive && (
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableRow key="opening-balance-row" className="bg-muted/50 hover:bg-muted/50">
                   <TableCell colSpan={4} className="font-bold text-right p-2">Opening Balance</TableCell>
                   <TableCell className="text-right font-bold font-mono p-2">{formatBalance(openingBalance)}</TableCell>
                   <TableCell></TableCell>
@@ -180,7 +178,7 @@ export default function TransactionTable({ groupedTransactions, accounts, partie
 
               return (
               <React.Fragment key={group.date}>
-                <TableRow className="bg-primary/10 hover:bg-primary/20 sticky top-0 z-10">
+                <TableRow key={`date-header-${group.date}`} className="bg-primary/10 hover:bg-primary/20 sticky top-0 z-10">
                   <TableCell colSpan={6} className="p-2">
                     <div className="flex justify-between items-center">
                         <h3 className="font-bold text-lg text-primary">{formatDate(group.date)}</h3>
@@ -288,7 +286,7 @@ export default function TransactionTable({ groupedTransactions, accounts, partie
               </React.Fragment>
             )})
           ) : (
-            <TableRow>
+            <TableRow key="no-transactions-row">
               <TableCell colSpan={6} className="h-24 text-center">
                 No transactions found for the selected period. Use filters to see other transactions.
               </TableCell>
