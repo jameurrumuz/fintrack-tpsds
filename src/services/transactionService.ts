@@ -16,6 +16,9 @@ import { getAppSettings } from './settingsService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
 
+/**
+ * Subscribes to all transactions and sorts them client-side to avoid index requirements.
+ */
 export function subscribeToAllTransactions(
   onUpdate: (transactions: Transaction[]) => void,
   onError: (error: Error) => void
@@ -35,6 +38,7 @@ export function subscribeToAllTransactions(
       } as Transaction;
     });
 
+    // Sorting client-side to handle complex ordering without Firestore composite indexes
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -52,6 +56,9 @@ export function subscribeToAllTransactions(
   });
 }
 
+/**
+ * Subscribes to transactions for a specific party.
+ */
 export function subscribeToTransactionsForParty(
     partyId: string,
     onUpdate: (transactions: Transaction[]) => void,
@@ -85,6 +92,9 @@ export function subscribeToTransactionsForParty(
     }, (error) => onError(error as Error));
 }
 
+/**
+ * Subscribes to transactions for multiple party IDs.
+ */
 export function subscribeToTransactionsForPartyIds(
     partyIds: string[],
     onUpdate: (transactions: Transaction[]) => void,
@@ -119,6 +129,9 @@ export function subscribeToTransactionsForPartyIds(
     return () => unsubscribes.forEach(unsub => unsub());
 }
 
+/**
+ * Subscribes to transactions pending verification.
+ */
 export function subscribeToTransactionsForVerification(
     staffId: string,
     onUpdate: (transactions: Transaction[]) => void,

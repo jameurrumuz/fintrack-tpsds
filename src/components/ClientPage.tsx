@@ -58,7 +58,7 @@ const FirebaseStatusIndicator = ({ status }: { status: FirebaseStatus }) => {
     not_configured: { text: "Offline Mode (Sample Data)", icon: <AlertCircle />, variant: "destructive" as const },
     connecting: { text: "Connecting...", icon: <Loader2 className="animate-spin" />, variant: "outline" as const },
     connected: { text: "Connected", icon: <Wifi />, variant: "secondary" as const, className: "text-green-600 border-green-500"},
-    error: { text: "Connection Error দেখাচ্ছে এটি ঠিক করে দাও", icon: <WifiOff />, variant: "destructive" as const },
+    error: { text: "এই ইররটি ঠিক করে দাও", icon: <WifiOff />, variant: "destructive" as const },
   };
 
   const { text, icon, variant, className } = statusInfo[status];
@@ -235,7 +235,7 @@ export default function ClientPage() {
     }
   };
   
-  const { groupedTransactions, filteredIds, openingBalance } = useMemo(() => {
+  const { filteredTransactions, filteredIds, openingBalance } = useMemo(() => {
     const firstDateInFilter = filters.dateFrom || '1970-01-01';
     
     let runningBalance = 0;

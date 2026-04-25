@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -15,7 +14,7 @@ import { useFieldArray, useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Slider } from '@/components/ui/slider';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn, cleanUndefined, applyTheme } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -766,9 +765,11 @@ export default function SettingsPage() {
             tradeLicenceFieldOrder: data.tradeLicenceFieldOrder || [],
             // Ensure smsTemplates is an array of objects
             smsTemplates: (data.smsTemplates || []).map(t => ({ id: t.id, type: t.type, message: t.message })),
+            newsCategories: appSettings?.newsCategories || [],
         };
         
         await saveAppSettings(cleanUndefined(finalSettings));
+        setAppSettings(finalSettings); // Update local state so future changes use updated base
         
         localStorage.setItem('app-security-question', data.securityQuestion || '');
         localStorage.setItem('app-security-answer', data.securityAnswer || '');
@@ -799,7 +800,7 @@ export default function SettingsPage() {
           await recalculateBalancesFromTransaction();
           toast({ title: 'Success!', description: 'All account and party balances have been recalculated and synced successfully.' });
       } catch (error: any) {
-           toast({ variant: 'destructive', title: 'Recalculation Failed', description: error.message });
+           toast({ variant: 'destructive', title: 'Error', description: error.message });
       } finally {
           setIsRecalculating(false);
       }
@@ -990,7 +991,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
               <div className="space-y-2">
-                <Label>Font Size ({watchedSettings.fontSize}px)</Label>
+                <Label>Appearance Settings এ ফন্ট সাইজ পরিবর্তন করে Save All Settings দিলে সেভ হচ্ছে না এটি ঠিক করে দাও যেন সেভ হয় ({watchedSettings.fontSize}px)</Label>
                 <Controller
                   name="fontSize"
                   control={form.control}
