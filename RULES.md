@@ -1,0 +1,33 @@
+# প্রোজেক্ট কোডিং রুলস (Project Rules)
+
+এই প্রোজেক্টে যেকোনো নতুন কোড লিখা বা পরিবর্তনের সময় নিচের নিয়মগুলো কঠোরভাবে পালন করতে হবে:
+
+## ১. টেকনোলজি স্ট্যাক (Tech Stack)
+- **Framework**: Next.js 16+ (App Router).
+- **Frontend**: React 19, Tailwind CSS.
+- **UI Components**: ShadCN UI (সবসময় components/ui ফোল্ডার থেকে ব্যবহার করতে হবে)।
+- **Icons**: Lucide-React (আইকন ব্যবহারের আগে নিশ্চিত হতে হবে সেটি লাইব্রেরিতে আছে কি না)।
+- **Database & Auth**: Firebase Client SDK (শুধুমাত্র 'use client' ডিরেক্টিভ সহ)।
+- **AI**: Genkit v1.x (অবশ্যই property access syntax ব্যবহার করতে হবে, যেমন: `response.text`)।
+
+## ২. ইউআই এবং ডিজাইনের নিয়ম (UI & Styling)
+- **ShadCN First**: সবসময় ShadCN এর কম্পোনেন্ট ব্যবহার করতে হবে।
+- **Modern Look**: প্রফেশনাল লুকের জন্য rounded corners, shadows এবং drop shadows ব্যবহার করতে হবে।
+- **Colors**: হার্ডকোডেড টেলউইন্ড কালার (যেমন: `text-red-500`) পরিহার করে CSS variables (`globals.css` থেকে) ব্যবহার করতে হবে।
+- **Responsive**: কোড অবশ্যই মোবাইল এবং ডেস্কটপ উভয়ের জন্য রেসপনসিভ হতে হবে।
+
+## ৩. ফায়ারবেস ব্যবহারের নিয়ম (Firebase Guidelines)
+- **Client Side Only**: কোনোভাবেই `firebase-admin` ব্যবহার করা যাবে না। সব ফাইল `'use client';` দিয়ে শুরু হতে হবে।
+- **Mutations**: `setDoc`, `addDoc`, `updateDoc` এর আগে `await` ব্যবহার করা যাবে না (Optimistic UI এর জন্য)।
+- **Error Handling**: ফায়ারবেস পারমিশন এরর হ্যান্ডেল করার জন্য `errorEmitter` এবং `FirestorePermissionError` ব্যবহার করতে হবে।
+- **Reference**: ডাইনামিক রেফারেন্স বা কোয়েরি ব্যবহারের সময় `useMemo` নিশ্চিত করতে হবে যাতে ইনফিনিট রেন্ডার লুপ না হয়।
+
+## ৪. জেনারেল কোডিং স্ট্যান্ডার্ড (General Standards)
+- **TypeScript**: কোড অবশ্যই টাইপ-সেফ হতে হবে।
+- **No Comments**: কোডের ভেতরে কোনো কমেন্ট যোগ করা যাবে না।
+- **Clean Code**: কোড রিডেবল এবং পারফরম্যান্ট হতে হবে।
+- **Hydration Errors**: `Math.random()` বা `new Date()` এর মতো ডাইনামিক ভ্যালুগুলো `useEffect`-এর ভেতরে রাখতে হবে যাতে সার্ভার ও ক্লায়েন্টের ডেটা এক থাকে।
+
+## ৫. জেনকিট (Genkit AI)
+- **Syntax**: Genkit v1.x এর লেটেস্ট সিনট্যাক্স ফলো করতে হবে।
+- **Flows**: এআই ফ্লো গুলো সবসময় `'use server';` ফাইলে থাকবে।
