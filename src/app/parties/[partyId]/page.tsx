@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
@@ -18,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -29,7 +28,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
-import { format as formatFns, subDays, parseISO, isValid } from 'date-fns';
+import { format, subDays, parseISO, isValid } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
 import InvoiceDialog from '@/components/pos/InvoiceDialog';
@@ -125,7 +124,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         }
       });
       getAppSettings().then(setAppSettings);
-      const unsubTx = subscribeToTransactionsForParty(partyId, (data) => setTransactions(data), (err) => toast({ variant: 'destructive', title: 'এই ইররটি ঠিক করে দাও', description: err.message }));
+      const unsubTx = subscribeToTransactionsForParty(partyId, (data) => setTransactions(data), (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
       const unsubAcc = subscribeToAccounts(setAccounts, console.error);
       
       const timer = setTimeout(() => setLoading(false), 500);
@@ -143,8 +142,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => b.date.localeCompare(a.date));
       if (enabledTxs.length > 0) {
         const today = new Date();
-        const todayStr = formatFns(today, 'yyyy-MM-dd');
-        const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
+        const todayStr = format(today, 'yyyy-MM-dd');
+        const sevenDaysAgo = format(subDays(today, 7), 'yyyy-MM-dd');
         
         const hasTxsInLast7Days = enabledTxs.some(t => t.date >= sevenDaysAgo && t.date <= todayStr);
         
@@ -153,7 +152,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         } else {
           const latestDate = parseISO(enabledTxs[0].date);
           const latestDateStr = enabledTxs[0].date;
-          const sevenDaysBeforeLatest = formatFns(subDays(latestDate, 7), 'yyyy-MM-dd');
+          const sevenDaysBeforeLatest = format(subDays(latestDate, 7), 'yyyy-MM-dd');
           setFilters(prev => ({ ...prev, dateFrom: sevenDaysBeforeLatest, dateTo: latestDateStr }));
         }
         setIsDateFilterEnabled(true);
@@ -226,7 +225,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     if (!party) return;
     setIsSaving(true);
     try {
-        const dateStr = formatFns(data.date, 'yyyy-MM-dd');
+        const dateStr = format(data.date, 'yyyy-MM-dd');
         
         await addTransaction({
             ...data,
@@ -723,7 +722,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
         </footer>
 
-        {/* Professional Print Layout (Matches Image) */}
+        {/* Professional Print Layout */}
         <div ref={printAreaRef} className="hidden print:block w-full bg-white text-black p-0">
              <style>{`
                 @media print {
