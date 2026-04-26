@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -33,6 +33,7 @@ import { format as formatFns } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -81,6 +82,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [smsData, setSmsData] = useState<SheetRow[]>([]);
   const [smsLoading, setSmsLoading] = useState(false);
   const [sendSms, setSendSms] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const transactionForm = useForm<FormValues>({
     resolver: zodResolver(partyTransactionSchema),
@@ -164,10 +166,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   const handleAddTransaction = async (data: FormValues) => {
     if (!party) return;
+    setIsSaving(true);
     try {
         const dateStr = formatFns(data.date, 'yyyy-MM-dd');
         
-        // Main Transaction
         await addTransaction({
             ...data,
             date: dateStr,
@@ -177,7 +179,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             sendSms: sendSms,
         });
 
-        // Charge Transaction (if any)
         if (data.charge && data.charge > 0) {
             await addTransaction({
                 date: dateStr,
@@ -204,6 +205,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         });
     } catch (error: any) {
         toast({ variant: 'destructive', title: "Error", description: error.message });
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -274,7 +277,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
-        {/* SMS Search Dialog */}
         <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
                 <DialogHeader><DialogTitle>Search SMS for Quick Entry</DialogTitle></DialogHeader>
@@ -340,11 +342,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </DialogContent>
         </Dialog>
 
-        {/* Main Entry Dialog */}
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Record Payment {formType === 'give' ? 'Given' : 'Received'}</DialogTitle>
+                    <DialogTitle>Record {formType === 'give' ? 'Payment Given' : 'Payment Received'}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-2">
                     <div className="flex justify-end">
