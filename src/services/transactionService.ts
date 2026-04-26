@@ -294,3 +294,8 @@ export function subscribeToTransactionsForPartyIds(ids: string[], onUpdate: (txs
     const q = query(coll, where('partyId', 'in', ids));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
 }
+
+export async function restoreDataFromBackup(data: any): Promise<void> {
+  const { restoreAllData } = await import('./backupService');
+  return restoreAllData(data);
+}
