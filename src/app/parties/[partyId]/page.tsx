@@ -18,11 +18,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save, Zap, ChevronLeft, ChevronRight, FileUp } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save, Zap, ChevronLeft, ChevronRight, FileUp, ListFilter } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useForm, Controller } from 'react-hook-form';
@@ -31,9 +31,12 @@ import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
 import { format as formatFns, subDays, parseISO, isValid } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
+import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
+import InvoiceDialog from '@/components/pos/InvoiceDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -64,6 +67,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { toast } = useToast();
 
   const [party, setParty] = useState<Party | null>(null);
+  const [parties, setParties] = useState<Party[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -74,6 +78,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     via: 'all',
     nature: 'all' as 'all' | 'inc' | 'exp'
   });
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [showIncomeExpenseInPrint, setShowIncomeExpenseInPrint] = useState(false);
   const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("transactions");
   
@@ -82,6 +88,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
   const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<Transaction | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Transaction | null>(null);
   
   const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false);
   const [smsData, setSmsData] = useState<SheetRow[]>([]);
@@ -169,7 +177,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return { ...t, runningBalance: running };
     });
 
-    const opening = isDateFilterEnabled ? withRunning
+    const opening = (isDateFilterEnabled && !showAllTransactions) ? withRunning
         .filter(t => t.date < filters.dateFrom)
         .pop()?.runningBalance || 0 : 0;
 
@@ -180,6 +188,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         if (filters.nature === 'inc' && effect <= 0) return false;
         if (filters.nature === 'exp' && effect >= 0) return false;
 
+        if (showAllTransactions) return true;
         if (!isDateFilterEnabled) return true;
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
@@ -195,7 +204,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         openingBalance: opening, 
         finalBalanceInTable: running
     };
-  }, [transactions, filters, isDateFilterEnabled]);
+  }, [transactions, filters, isDateFilterEnabled, showAllTransactions]);
 
   const handleAddTransaction = async (data: FormValues) => {
     if (!party) return;
@@ -203,7 +212,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     try {
         const dateStr = formatFns(data.date, 'yyyy-MM-dd');
         
-        await addTransaction({
+        const txId = await addTransaction({
             ...data,
             date: dateStr,
             partyId: party.id,
@@ -304,12 +313,16 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       setIsFormOpen(true);
   }
 
+  const getAccountName = (accountId?: string) => accounts.find(a => a.id === accountId)?.name || '';
+
   if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
-        
+        <PaymentReceiptDialog isOpen={!!viewingReceipt} onOpenChange={(open) => !open && setViewingReceipt(null)} transaction={viewingReceipt} party={party} appSettings={appSettings} accounts={accounts} allTransactions={transactions} />
+        <InvoiceDialog isOpen={!!viewingInvoice} onOpenChange={(open) => !open && setViewingInvoice(null)} invoice={viewingInvoice} party={party} parties={[party]} appSettings={appSettings} onPrint={() => window.print()} accounts={accounts} allTransactions={transactions} />
+
         <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
             <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
                 <DialogHeader><DialogTitle>Search SMS for Quick Entry</DialogTitle></DialogHeader>
@@ -507,38 +520,50 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         </header>
 
         <main className="container mx-auto p-3 flex-1 overflow-auto">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
-                <div className="md:col-span-2 flex items-center gap-2">
-                    <div className="flex-1 space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
-                        <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" />
+            <div className="flex flex-col gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                    <div className="md:col-span-2 flex items-center gap-2">
+                        <div className="flex-1 space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
+                            <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                        </div>
+                        <span className="mt-6 text-muted-foreground">-</span>
+                        <div className="flex-1 space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
+                            <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                        </div>
                     </div>
-                    <span className="mt-6 text-muted-foreground">-</span>
-                    <div className="flex-1 space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
-                        <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" />
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
+                        <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
+                            <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Profiles</SelectItem>
+                                {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
+                        <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
+                            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Transactions</SelectItem>
+                                <SelectItem value="inc">INC (Credits)</SelectItem>
+                                <SelectItem value="exp">EXP (Debits)</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
-                <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
-                    <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
-                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Profiles</SelectItem>
-                            {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
-                    <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
-                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Transactions</SelectItem>
-                            <SelectItem value="inc">INC (Credits)</SelectItem>
-                            <SelectItem value="exp">EXP (Debits)</SelectItem>
-                        </SelectContent>
-                    </Select>
+                <div className="flex items-center justify-between gap-4 border-t pt-2">
+                    <div className="flex items-center gap-2">
+                        <Switch id="all-tx-switch" checked={showAllTransactions} onCheckedChange={setShowAllTransactions} />
+                        <Label htmlFor="all-tx-switch" className="text-xs font-bold uppercase cursor-pointer">All Transactions</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Checkbox id="print-inc-exp" checked={showIncomeExpenseInPrint} onCheckedChange={c => setShowIncomeExpenseInPrint(!!c)} />
+                        <Label htmlFor="print-inc-exp" className="text-xs font-bold uppercase cursor-pointer">Income/Expense In Print</Label>
+                    </div>
                 </div>
             </div>
 
@@ -564,7 +589,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                         {isDateFilterEnabled && (
+                         {isDateFilterEnabled && !showAllTransactions && (
                             <TableRow className="bg-slate-50 italic">
                                 <TableCell colSpan={4} className="text-right font-medium text-xs">Opening Balance</TableCell>
                                 <TableCell className="text-right font-bold text-xs">{formatAmount(openingBalance)}</TableCell>
@@ -580,22 +605,37 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                               const effect = getPartyBalanceEffect(t);
                               const isDebit = effect < 0;
                               const isCredit = effect > 0;
+                              const isInternal = effect === 0;
+                              
+                              // If it's a spent/income and not selected for print, we add a print-only hiding class
+                              const printHiddenClass = isInternal && !showIncomeExpenseInPrint ? 'print:hidden' : '';
+
                               return (
-                                <TableRow key={t.id} className="group hover:bg-muted/30">
+                                <TableRow key={t.id} className={cn("group hover:bg-muted/30", printHiddenClass)}>
                                     <TableCell className="text-[10px]">{formatDate(date)}</TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="text-xs">{t.description}</span>
-                                            <Badge variant="outline" className="text-[8px] w-fit h-4 uppercase">{t.type}</Badge>
+                                            <span className="text-xs font-semibold">{t.description}</span>
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                <Badge variant="outline" className="text-[8px] h-4 uppercase">{t.type.replace('_', ' ')}</Badge>
+                                                {t.accountId && <Badge variant="secondary" className="text-[8px] h-4">{getAccountName(t.accountId)}</Badge>}
+                                                {t.via && <Badge variant="outline" className="text-[8px] h-4 border-primary/20 text-primary">{t.via}</Badge>}
+                                            </div>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount) : '-'}</TableCell>
                                     <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount) : '-'}</TableCell>
                                     <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-right no-print">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
+                                                {(t.type === 'sale' || t.type === 'credit_sale') && (
+                                                    <DropdownMenuItem onClick={() => setViewingInvoice(t)}><Eye className="mr-2 h-4 w-4"/> View Invoice</DropdownMenuItem>
+                                                )}
+                                                {(t.type === 'receive' || t.type === 'give') && (
+                                                    <DropdownMenuItem onClick={() => setViewingReceipt(t)}><Receipt className="mr-2 h-4 w-4"/> View Receipt</DropdownMenuItem>
+                                                )}
                                                 <DropdownMenuItem onClick={() => setEditingTransaction(t)}><Edit className="mr-2 h-4 w-4"/> Edit</DropdownMenuItem>
                                                 <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteTransaction(t.id)}><Trash2 className="mr-2 h-4 w-4"/> Disable</DropdownMenuItem>
                                             </DropdownMenuContent>
