@@ -288,3 +288,9 @@ export async function handleSmsNotification(transaction: Transaction, party: Par
     const { handleSmsNotification: sendSms } = await import('./possmsnotificationService');
     return sendSms(transaction, party, paidAmount, previousDue);
 }
+
+export function subscribeToTransactionsForPartyIds(ids: string[], onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    const coll = collection(db, 'transactions');
+    const q = query(coll, where('partyId', 'in', ids));
+    return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
+}

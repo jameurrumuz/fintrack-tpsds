@@ -29,7 +29,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
-import { format as formatFns } from 'date-fns';
+import { format as formatFns, subDays, parseISO, isValid } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
@@ -68,7 +68,12 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', via: 'all' });
+  const [filters, setFilters] = useState({ 
+    dateFrom: '', 
+    dateTo: '', 
+    via: 'all',
+    nature: 'all' as 'all' | 'inc' | 'exp'
+  });
   const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("transactions");
   
@@ -123,6 +128,30 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     }
   }, [partyId, toast, transactionForm]);
 
+  // Logic for default 7-day filter
+  useEffect(() => {
+    if (!loading && transactions.length > 0) {
+      const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => b.date.localeCompare(a.date));
+      if (enabledTxs.length > 0) {
+        const today = new Date();
+        const todayStr = formatFns(today, 'yyyy-MM-dd');
+        const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
+        
+        const hasTxsInLast7Days = enabledTxs.some(t => t.date >= sevenDaysAgo && t.date <= todayStr);
+        
+        if (hasTxsInLast7Days) {
+          setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
+        } else {
+          const latestDate = parseISO(enabledTxs[0].date);
+          const latestDateStr = enabledTxs[0].date;
+          const sevenDaysBeforeLatest = formatFns(subDays(latestDate, 7), 'yyyy-MM-dd');
+          setFilters(prev => ({ ...prev, dateFrom: sevenDaysBeforeLatest, dateTo: latestDateStr }));
+        }
+        setIsDateFilterEnabled(true);
+      }
+    }
+  }, [loading, transactions.length]);
+
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
@@ -147,6 +176,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
     let filtered = withRunning.filter(t => {
         if (filters.via !== 'all' && t.via !== filters.via) return false;
+        
+        const effect = getPartyBalanceEffect(t);
+        if (filters.nature === 'inc' && effect <= 0) return false;
+        if (filters.nature === 'exp' && effect >= 0) return false;
+
         if (!isDateFilterEnabled) return true;
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
@@ -154,7 +188,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime());
+    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(a.date).getTime());
 
     return { 
         groupedTransactions: groupedArray, 
@@ -474,6 +508,41 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         </header>
 
         <main className="container mx-auto p-3 flex-1 overflow-auto">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
+                <div className="md:col-span-2 flex items-center gap-2">
+                    <div className="flex-1 space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
+                        <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" />
+                    </div>
+                    <span className="mt-6 text-muted-foreground">-</span>
+                    <div className="flex-1 space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
+                        <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" />
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
+                    <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
+                        <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Profiles</SelectItem>
+                            {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
+                    <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
+                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Transactions</SelectItem>
+                            <SelectItem value="inc">INC (Credits)</SelectItem>
+                            <SelectItem value="exp">EXP (Debits)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="hidden">
                 <TabsTrigger value="transactions">Transactions</TabsTrigger>
@@ -489,13 +558,20 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-xs">Date</TableHead>
                           <TableHead>Description</TableHead>
-                          <TableHead className="text-right text-xs">Dr</TableHead>
-                          <TableHead className="text-right text-xs">Cr</TableHead>
+                          <TableHead className="text-right text-xs">Dr (Gave)</TableHead>
+                          <TableHead className="text-right text-xs">Cr (Recv)</TableHead>
                           <TableHead className="text-right text-xs">Balance</TableHead>
                           <TableHead className="w-[40px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
+                         {isDateFilterEnabled && (
+                            <TableRow className="bg-slate-50 italic">
+                                <TableCell colSpan={4} className="text-right font-medium text-xs">Opening Balance</TableCell>
+                                <TableCell className="text-right font-bold text-xs">{formatAmount(openingBalance)}</TableCell>
+                                <TableCell></TableCell>
+                            </TableRow>
+                        )}
                         {groupedTransactions.map(([date, txs]) => (
                           <React.Fragment key={date}>
                             <TableRow className="bg-primary/5 hover:bg-primary/10">
@@ -514,9 +590,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                             <Badge variant="outline" className="text-[8px] w-fit h-4 uppercase">{t.type}</Badge>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-right text-red-600 text-[10px]">{isDebit ? formatAmount(t.amount) : '-'}</TableCell>
-                                    <TableCell className="text-right text-green-600 text-[10px]">{isCredit ? formatAmount(t.amount) : '-'}</TableCell>
-                                    <TableCell className="text-right font-bold text-[10px]">{formatAmount(t.runningBalance)}</TableCell>
+                                    <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount) : '-'}</TableCell>
+                                    <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount) : '-'}</TableCell>
+                                    <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
@@ -534,8 +610,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={4} className="text-right font-bold text-xs">Final Balance</TableCell>
-                          <TableCell className="text-right font-bold text-xs">{formatAmount(finalBalanceInTable)}</TableCell>
+                          <TableCell colSpan={4} className="text-right font-bold text-xs uppercase">Current Final Balance</TableCell>
+                          <TableCell className="text-right font-bold text-xs font-mono">{formatAmount(finalBalanceInTable)}</TableCell>
                           <TableCell></TableCell>
                         </TableRow>
                       </TableFooter>
@@ -563,9 +639,14 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
             <TabsContent value="old_ledger">
                  <Card>
-                    <CardHeader><CardTitle>Old Ledger Data</CardTitle></CardHeader>
+                    <CardHeader className="flex-row items-center justify-between">
+                        <CardTitle>Old Ledger Data</CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={`/old-data?partyId=${partyId}`}><FileUp className="mr-2 h-4 w-4"/> Import PDF</Link>
+                        </Button>
+                    </CardHeader>
                     <CardContent>
-                        <p className="text-muted-foreground text-center py-12">Imported historical data coming soon...</p>
+                        <p className="text-muted-foreground text-center py-12">Imported historical data will be listed here.</p>
                     </CardContent>
                 </Card>
             </TabsContent>
