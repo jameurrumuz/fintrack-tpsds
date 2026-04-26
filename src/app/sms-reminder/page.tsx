@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, Pin, PinOff, MessageSquarePlus as MessageSquarePlusIcon, Send } from 'lucide-react';
+import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, Pin, PinOff, MessageSquarePlus as MessageSquarePlusIcon, Send, Package } from 'lucide-react';
 import type { Party, Transaction, AppSettings, SmsLog, SmsTemplate, SmsPackage } from '@/types';
 import { subscribeToParties } from '@/services/partyService';
 import { subscribeToAllTransactions } from '@/services/transactionService';
