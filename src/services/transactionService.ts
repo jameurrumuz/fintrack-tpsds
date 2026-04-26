@@ -82,41 +82,6 @@ export function subscribeToTransactionsForParty(
     }, (error) => onError(error as Error));
 }
 
-export function subscribeToTransactionsForPartyIds(
-    partyIds: string[],
-    onUpdate: (transactions: Transaction[]) => void,
-    onError: (error: Error) => void
-) {
-    const collectionRef = getTransactionsCollection();
-    if (!collectionRef || partyIds.length === 0) return () => {};
-
-    // Firestore IN query limit is 10, so we might need multiple queries for more IDs
-    // For simplicity, we fetch in chunks if needed
-    const q = query(collectionRef, where('partyId', 'in', partyIds.slice(0, 10)));
-
-    return onSnapshot(q, (snapshot) => {
-        const transactions = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
-            } as Transaction;
-        });
-
-        transactions.sort((a, b) => {
-            const dateA = new Date(a.date).getTime();
-            const dateB = new Date(b.date).getTime();
-            if (dateA !== dateB) return dateB - dateA;
-            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeB - timeA;
-        });
-
-        onUpdate(transactions);
-    }, (error) => onError(error as Error));
-}
-
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<string> {
   if (!db) throw new Error('Firebase not configured');
   

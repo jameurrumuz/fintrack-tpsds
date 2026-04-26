@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, ChevronDown, Share2, Landmark, Briefcase, FileText, PiggyBank, Scale } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, ChevronDown, Share2, Landmark, Briefcase, FileText, PiggyBank, Scale, History } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -37,7 +37,7 @@ const partyTransactionSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   amount: z.coerce.number().positive('Amount must be positive'),
   accountId: z.string().optional(),
-  type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale_return', 'purchase_return', 'credit_give', 'credit_income']),
+  type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale', 'credit_give', 'credit_income']),
   via: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (['give', 'receive', 'sale', 'purchase', 'spent', 'income'].includes(data.type)) {
@@ -69,8 +69,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formType, setFormType] = useState<'give' | 'receive' | 'spent' | 'credit_give' | 'credit_income'>('give');
-  const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
   const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
+  const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const transactionForm = useForm<FormValues>({
@@ -140,7 +140,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(a.date).getTime());
+    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime());
 
     return { 
         groupedTransactions: groupedArray, 
@@ -211,7 +211,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
-        {/* Type Selection Dialogs */}
         <Dialog open={isReceiveOptionsOpen} onOpenChange={setIsReceiveOptionsOpen}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
@@ -220,16 +219,16 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('receive')}>
-                        <div className="p-2 bg-green-100 rounded-full"><Wallet className="h-6 w-6 text-green-600"/></div>
-                        <div className="text-left"><p className="font-bold">Receive Payment</p><p className="text-xs text-muted-foreground">Cash/Bank entry for existing due</p></div>
+                        <div className="p-2 rounded-full bg-green-100 text-green-600"><Wallet className="h-6 w-6"/></div>
+                        <div className="text-left"><p className="font-bold text-sm">Receive Payment</p><p className="text-[10px] text-muted-foreground">Cash/Bank entry for existing due</p></div>
                     </Button>
                     <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('credit_income')}>
-                        <div className="p-2 bg-purple-100 rounded-full"><HandCoins className="h-6 w-6 text-purple-600"/></div>
-                        <div className="text-left"><p className="font-bold">Credit Income (Due)</p><p className="text-xs text-muted-foreground">Record income without cash entry</p></div>
+                        <div className="p-2 rounded-full bg-purple-100 text-purple-600"><HandCoins className="h-6 w-6"/></div>
+                        <div className="text-left"><p className="font-bold text-sm">Credit Income (Due)</p><p className="text-[10px] text-muted-foreground">Record income without cash entry</p></div>
                     </Button>
                     <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openReceiveForm('advance')}>
-                        <div className="p-2 bg-blue-100 rounded-full"><ArrowDownToLine className="h-6 w-6 text-blue-600"/></div>
-                        <div className="text-left"><p className="font-bold">Advance Receive</p><p className="text-xs text-muted-foreground">Pre-payment for future business</p></div>
+                        <div className="p-2 rounded-full bg-blue-100 text-blue-600"><ArrowDownToLine className="h-6 w-6"/></div>
+                        <div className="text-left"><p className="font-bold text-sm">Advance Receive</p><p className="text-[10px] text-muted-foreground">Pre-payment for future business</p></div>
                     </Button>
                 </div>
             </DialogContent>
@@ -243,12 +242,12 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openGiveForm('give')}>
-                        <div className="p-2 bg-red-100 rounded-full"><Wallet className="h-6 w-6 text-red-600"/></div>
-                        <div className="text-left"><p className="font-bold">Give (Paid)</p><p className="text-xs text-muted-foreground">Cash/Bank payment to party</p></div>
+                        <div className="p-2 rounded-full bg-red-100 text-red-600"><Wallet className="h-6 w-6"/></div>
+                        <div className="text-left"><p className="font-bold text-sm">Give (Paid)</p><p className="text-[10px] text-muted-foreground">Cash/Bank payment to party</p></div>
                     </Button>
                     <Button variant="outline" className="h-16 flex items-center justify-start gap-4 px-6" onClick={() => openGiveForm('credit_give')}>
-                        <div className="p-2 bg-orange-100 rounded-full"><HandCoins className="h-6 w-6 text-orange-600"/></div>
-                        <div className="text-left"><p className="font-bold">Credit Give (Due)</p><p className="text-xs text-muted-foreground">Record due without cash entry</p></div>
+                        <div className="p-2 rounded-full bg-orange-100 text-orange-600"><HandCoins className="h-6 w-6"/></div>
+                        <div className="text-left"><p className="font-bold text-sm">Credit Give (Due)</p><p className="text-[10px] text-muted-foreground">Record due without cash entry</p></div>
                     </Button>
                 </div>
             </DialogContent>
@@ -298,9 +297,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <Avatar className="h-8 w-8"><AvatarFallback className="bg-primary text-white font-bold text-xs">{party.name?.charAt(0)}</AvatarFallback></Avatar>
                         <div><h1 className="text-sm font-bold truncate max-w-[150px]">{party.name}</h1><p className="text-[10px] text-muted-foreground">{party.phone || 'No Phone'}</p></div>
                     </div>
-                    <div className="flex items-center gap-2">
-                         <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-2"/> Print</Button>
-                    </div>
                 </div>
                 <div className="mt-2">
                     <Card className="bg-gray-100 dark:bg-gray-800 border-0 shadow-sm relative overflow-hidden">
@@ -308,7 +304,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-1">{currentBalance >= 0 ? 'NET PAYABLE' : 'NET RECEIVABLE'}</p>
                             <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
                             
-                            {/* Quick Action Icon Row */}
                             <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
                                 <button onClick={() => setActiveTab('loan')} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors"><Landmark className="h-4 w-4"/></div>
@@ -325,7 +320,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                 <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">POS</span>
-                                </button>
+                                </Link>
                                 <button onClick={() => window.print()} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">Print</span>
