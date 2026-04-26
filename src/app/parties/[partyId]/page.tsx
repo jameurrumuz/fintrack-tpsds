@@ -29,7 +29,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
-import { format, subDays, parseISO, isValid } from 'date-fns';
+import { format as formatFns, subDays, parseISO, isValid } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
 import InvoiceDialog from '@/components/pos/InvoiceDialog';
@@ -143,8 +143,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => b.date.localeCompare(a.date));
       if (enabledTxs.length > 0) {
         const today = new Date();
-        const todayStr = format(today, 'yyyy-MM-dd');
-        const sevenDaysAgo = format(subDays(today, 7), 'yyyy-MM-dd');
+        const todayStr = formatFns(today, 'yyyy-MM-dd');
+        const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
         
         const hasTxsInLast7Days = enabledTxs.some(t => t.date >= sevenDaysAgo && t.date <= todayStr);
         
@@ -153,7 +153,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         } else {
           const latestDate = parseISO(enabledTxs[0].date);
           const latestDateStr = enabledTxs[0].date;
-          const sevenDaysBeforeLatest = format(subDays(latestDate, 7), 'yyyy-MM-dd');
+          const sevenDaysBeforeLatest = formatFns(subDays(latestDate, 7), 'yyyy-MM-dd');
           setFilters(prev => ({ ...prev, dateFrom: sevenDaysBeforeLatest, dateTo: latestDateStr }));
         }
         setIsDateFilterEnabled(true);
@@ -226,7 +226,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     if (!party) return;
     setIsSaving(true);
     try {
-        const dateStr = format(data.date, 'yyyy-MM-dd');
+        const dateStr = formatFns(data.date, 'yyyy-MM-dd');
         
         await addTransaction({
             ...data,
@@ -457,7 +457,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                              <Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                    <SelectContent>
+                                        {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
+                                    </SelectContent>
                                 </Select>
                             )} />
                         </div>
@@ -748,7 +750,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </div>
                 <div className="text-right">
                     <h2 className="text-3xl font-black text-slate-800 tracking-tighter">PARTY STATEMENT</h2>
-                    <p className="text-[10px] text-gray-400 mt-1 uppercase">Generated on: {format(new Date(), 'dd/MM/yyyy hh:mm a')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase">Generated on: {formatFns(new Date(), 'dd/MM/yyyy hh:mm a')}</p>
                 </div>
             </div>
 

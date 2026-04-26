@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, Pin, PinOff, MessageSquarePlus as MessageSquarePlusIcon, Send, Package } from 'lucide-react';
+import { Loader2, MessageSquareWarning, MessageSquarePlus, Info, Smartphone, Cog, CheckCircle, AlertCircle, Database, History, Search, Pin, PinOff, MessageSquarePlus as MessageSquarePlusIcon, Send, Package, Edit, Trash2 } from 'lucide-react';
 import type { Party, Transaction, AppSettings, SmsLog, SmsTemplate, SmsPackage } from '@/types';
 import { subscribeToParties } from '@/services/partyService';
 import { subscribeToAllTransactions } from '@/services/transactionService';
@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format as formatFns, parseISO, differenceInDays } from 'date-fns';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -364,7 +364,7 @@ export default function SmsReminderPage() {
     handleCurrentMessageChange(currentMessage + placeholder);
   };
   
-  const [newSmsPackage, setNewSmsPackage] = useState<Omit<SmsPackage, 'id'>>({ provider: 'Twilio', purchaseDate: format(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
+  const [newSmsPackage, setNewSmsPackage] = useState<Omit<SmsPackage, 'id'>>({ provider: 'Twilio', purchaseDate: formatFns(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
   const [editingSmsPackage, setEditingSmsPackage] = useState<SmsPackage | null>(null);
   const [isPackageDialogOpen, setIsPackageDialogOpen] = useState(false);
   
@@ -390,7 +390,7 @@ export default function SmsReminderPage() {
     
     await saveAppSettings({ ...appSettings, smsPackages: updatedPackages });
     toast({ title: 'Success', description: `SMS package ${editingSmsPackage ? 'updated' : 'added'}.` });
-    setNewSmsPackage({ provider: 'Twilio', purchaseDate: format(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
+    setNewSmsPackage({ provider: 'Twilio', purchaseDate: formatFns(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
     setEditingSmsPackage(null);
     setIsPackageDialogOpen(false);
   };
@@ -415,7 +415,7 @@ export default function SmsReminderPage() {
   
   const openNewPackageDialog = () => {
     setEditingSmsPackage(null);
-    setNewSmsPackage({ provider: 'Twilio', purchaseDate: format(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
+    setNewSmsPackage({ provider: 'Twilio', purchaseDate: formatFns(new Date(), 'yyyy-MM-dd'), quantity: 0, cost: 0, expiryDate: '' });
     setIsPackageDialogOpen(true);
   };
 
@@ -684,7 +684,7 @@ export default function SmsReminderPage() {
                             <TableBody>
                                 {smsLogs.length > 0 ? smsLogs.map(log => (
                                     <TableRow key={log.id}>
-                                        <TableCell>{format(parseISO(log.createdAt), 'dd/MM/yy p')}</TableCell>
+                                        <TableCell>{formatFns(parseISO(log.createdAt), 'dd/MM/yy p')}</TableCell>
                                         <TableCell>{log.partyName} ({log.to})</TableCell>
                                         <TableCell className="text-xs">{log.message}</TableCell>
                                         <TableCell><Badge variant="outline">{log.provider}</Badge></TableCell>
