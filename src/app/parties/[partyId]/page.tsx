@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
 import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -611,12 +612,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                               const effect = getPartyBalanceEffect(t);
                               const isInternal = effect === 0;
                               
-                              // If it's a spent/income and not selected for print, we add a print-only hiding class
                               const printHiddenClass = isInternal && !showIncomeExpenseInPrint ? 'print:hidden' : '';
 
-                              // Money in (receive, credit_income, sale_return, purchase_return, income)
                               const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income'].includes(t.type) || effect > 0;
-                              // Money out (give, credit_sale, purchase, spent)
                               const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give'].includes(t.type) || effect < 0;
 
                               return (
@@ -637,7 +635,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                     <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
                                     <TableCell className="text-right no-print">
                                         <DropdownMenu>
-                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="h-3 w-3" /></Button></DropdownMenuTrigger>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="h-3 w-3" /></Button>
+                                            </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 {(t.type === 'sale' || t.type === 'credit_sale') && (
                                                     <DropdownMenuItem onClick={() => setViewingInvoice(t)}><Eye className="mr-2 h-4 w-4"/> View Invoice</DropdownMenuItem>
