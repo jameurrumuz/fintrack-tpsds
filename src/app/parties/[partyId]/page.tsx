@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
+import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save, Zap, ChevronLeft, ChevronRight, FileUp, ListFilter } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -37,6 +37,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
+import QRCode from 'qrcode';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -65,9 +66,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { partyId } = use(params);
   const router = useRouter();
   const { toast } = useToast();
+  const printAreaRef = useRef<HTMLDivElement>(null);
 
   const [party, setParty] = useState<Party | null>(null);
-  const [parties, setParties] = useState<Party[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -96,6 +97,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [smsLoading, setSmsLoading] = useState(false);
   const [sendSms, setSendSms] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
 
   const transactionForm = useForm<FormValues>({
     resolver: zodResolver(partyTransactionSchema),
@@ -206,13 +208,27 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     };
   }, [transactions, filters, isDateFilterEnabled, showAllTransactions]);
 
+  const businessProfile = useMemo(() => {
+      return appSettings?.businessProfiles.find(p => p.name === party?.group) || appSettings?.businessProfiles[0];
+  }, [appSettings, party]);
+
+  useEffect(() => {
+    if (party && businessProfile) {
+        const qrText = `Party: ${party.name}\nBalance: ${formatAmount(currentBalance)}\nFrom: ${businessProfile.name}`;
+        QRCode.toDataURL(qrText, { width: 100, margin: 1, errorCorrectionLevel: 'H' }, (err, url) => {
+            if (err) return;
+            setQrCodeDataUrl(url);
+        });
+    }
+  }, [party, businessProfile, currentBalance]);
+
   const handleAddTransaction = async (data: FormValues) => {
     if (!party) return;
     setIsSaving(true);
     try {
         const dateStr = formatFns(data.date, 'yyyy-MM-dd');
         
-        const txId = await addTransaction({
+        await addTransaction({
             ...data,
             date: dateStr,
             partyId: party.id,
@@ -235,16 +251,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
         toast({ title: "Success", description: "Transaction added successfully." });
         setIsFormOpen(false);
-        transactionForm.reset({
-            date: new Date(),
-            description: '',
-            type: 'receive',
-            amount: '' as any,
-            accountId: accounts.find(a => a.name.toLowerCase() === 'cash')?.id || accounts[0]?.id || '',
-            via: party.group || 'Personal',
-            charge: 0,
-            chargeVia: party.group || 'Personal',
-        });
+        transactionForm.reset();
     } catch (error: any) {
         toast({ variant: 'destructive', title: "Error", description: error.message });
     } finally {
@@ -585,7 +592,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                           <TableHead className="text-right text-xs">Dr (Gave)</TableHead>
                           <TableHead className="text-right text-xs">Cr (Recv)</TableHead>
                           <TableHead className="text-right text-xs">Balance</TableHead>
-                          <TableHead className="w-[40px]"></TableHead>
+                          <TableHead className="w-[40px] no-print"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -593,7 +600,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <TableRow className="bg-slate-50 italic">
                                 <TableCell colSpan={4} className="text-right font-medium text-xs">Opening Balance</TableCell>
                                 <TableCell className="text-right font-bold text-xs">{formatAmount(openingBalance)}</TableCell>
-                                <TableCell></TableCell>
+                                <TableCell className="no-print"></TableCell>
                             </TableRow>
                         )}
                         {groupedTransactions.map(([date, txs]) => (
@@ -603,12 +610,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             </TableRow>
                             {txs.map((t) => {
                               const effect = getPartyBalanceEffect(t);
-                              const isDebit = effect < 0;
-                              const isCredit = effect > 0;
                               const isInternal = effect === 0;
                               
                               // If it's a spent/income and not selected for print, we add a print-only hiding class
                               const printHiddenClass = isInternal && !showIncomeExpenseInPrint ? 'print:hidden' : '';
+
+                              // Money in (receive, credit_income, sale_return, purchase_return, income)
+                              const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income'].includes(t.type) || effect > 0;
+                              // Money out (give, credit_sale, purchase, spent)
+                              const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give'].includes(t.type) || effect < 0;
 
                               return (
                                 <TableRow key={t.id} className={cn("group hover:bg-muted/30", printHiddenClass)}>
@@ -649,9 +659,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={4} className="text-right font-bold text-xs uppercase">Current Final Balance</TableCell>
+                          <TableCell colSpan={4} className="text-right font-bold text-xs uppercase">Closing Balance</TableCell>
                           <TableCell className="text-right font-bold text-xs font-mono">{formatAmount(finalBalanceInTable)}</TableCell>
-                          <TableCell></TableCell>
+                          <TableCell className="no-print"></TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
@@ -712,6 +722,118 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </div>
             </div>
         </footer>
+
+        {/* Professional Print Layout (Matches Image) */}
+        <div ref={printAreaRef} className="hidden print:block w-full bg-white text-black p-0">
+             <style>{`
+                @media print {
+                  @page { size: A4; margin: 1cm; }
+                  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+            `}</style>
+            
+            {/* Header */}
+            <div className="flex justify-between items-start mb-8">
+                <div className="flex gap-4">
+                     {businessProfile?.logoUrl && (
+                        <div className="relative h-16 w-16">
+                            <Image src={businessProfile.logoUrl} alt="Logo" fill className="object-contain" />
+                        </div>
+                     )}
+                     <div>
+                        <h1 className="text-2xl font-bold text-red-600">{businessProfile?.name || 'Rushaib Traders'}</h1>
+                        <p className="text-xs text-gray-500 max-w-[300px] leading-tight">{businessProfile?.address}</p>
+                        <p className="text-xs text-gray-500">{businessProfile?.phone}</p>
+                        <p className="text-xs text-gray-500">{businessProfile?.email || 'jameurrumuz@gmail.com'}</p>
+                     </div>
+                </div>
+                <div className="text-right">
+                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter">PARTY STATEMENT</h2>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase">Generated on: {format(new Date(), 'dd/MM/yyyy hh:mm a')}</p>
+                </div>
+            </div>
+
+            <Separator className="bg-slate-200 mb-8" />
+
+            {/* Customer Info & QR */}
+            <div className="flex justify-between items-end mb-8 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                <div className="space-y-1.5">
+                    <h3 className="text-2xl font-black text-slate-800 mb-2">{party.name}</h3>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Phone:</span>
+                        <span className="font-medium text-slate-700">{party.phone || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Address:</span>
+                        <span className="font-medium text-slate-700">{party.address || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Group:</span>
+                        <span className="font-medium text-slate-700">{party.group || 'Personal'}</span>
+                    </div>
+                </div>
+                <div className="text-center space-y-1">
+                    {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-20 w-20 mx-auto" />}
+                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Scan for details</p>
+                </div>
+            </div>
+
+            {/* Main Ledger Table */}
+            <Table className="border-collapse">
+                <TableHeader>
+                    <TableRow className="bg-slate-50 border-y border-slate-200">
+                        <TableHead className="h-10 text-slate-800 font-bold">Date</TableHead>
+                        <TableHead className="h-10 text-slate-800 font-bold">Description</TableHead>
+                        <TableHead className="h-10 text-slate-800 font-bold text-right">Debit (Dr)</TableHead>
+                        <TableHead className="h-10 text-slate-800 font-bold text-right">Credit (Cr)</TableHead>
+                        <TableHead className="h-10 text-slate-800 font-bold text-right">Balance</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                     {isDateFilterEnabled && !showAllTransactions && (
+                        <TableRow className="border-b border-slate-100 italic bg-slate-50/30">
+                            <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-600">Opening Balance</TableCell>
+                            <TableCell className="text-right py-3 font-black text-slate-700">{formatAmount(openingBalance)}</TableCell>
+                        </TableRow>
+                    )}
+                    {groupedTransactions.map(([date, txs]) => (
+                        <React.Fragment key={`print-${date}`}>
+                            {txs.map((t) => {
+                                const effect = getPartyBalanceEffect(t);
+                                const isInternal = effect === 0;
+                                if (isInternal && !showIncomeExpenseInPrint) return null;
+
+                                const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income'].includes(t.type) || effect > 0;
+                                const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give'].includes(t.type) || effect < 0;
+
+                                return (
+                                    <TableRow key={`print-${t.id}`} className="border-b border-slate-100">
+                                        <TableCell className="py-4 text-xs text-slate-600">{formatDate(date)}</TableCell>
+                                        <TableCell className="py-4">
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="font-bold text-slate-800 text-sm">{t.description}</span>
+                                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
+                                                    {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | via {t.via || 'Personal'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="py-4 text-right font-medium text-slate-700">{isDebit ? `৳${formatAmount(t.amount, false)}` : '-'}</TableCell>
+                                        <TableCell className="py-4 text-right font-medium text-slate-700">{isCredit ? `৳${formatAmount(t.amount, false)}` : '-'}</TableCell>
+                                        <TableCell className="py-4 text-right font-black text-slate-900">৳{formatAmount(t.runningBalance, false)}</TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </React.Fragment>
+                    ))}
+                </TableBody>
+                <TableFooter>
+                    <TableRow className="border-t-2 border-slate-200">
+                        <TableCell colSpan={4} className="py-6 text-right text-lg font-black text-slate-800 uppercase tracking-tighter">Closing Balance</TableCell>
+                        <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
+                    </TableRow>
+                </TableFooter>
+            </Table>
+        </div>
     </div>
   );
 }
