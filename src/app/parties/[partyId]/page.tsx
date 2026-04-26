@@ -198,7 +198,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Sort groupedArray Ascending: Oldest date at top, newest at bottom
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -500,15 +499,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
                                 <button onClick={() => setActiveTab('loan')} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors"><Landmark className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Loan</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">LOAN</span>
                                 </button>
                                 <button onClick={() => setActiveTab('old_ledger')} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-blue-100 text-blue-600 group-hover:bg-blue-200 transition-colors"><History className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Old</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">OLD</span>
                                 </button>
                                 <button onClick={() => setActiveTab('party-details')} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-orange-100 text-orange-600 group-hover:bg-orange-200 transition-colors"><FileText className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Exp</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">EXP</span>
                                 </button>
                                 <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
@@ -516,11 +515,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                 </Link>
                                 <button onClick={() => window.print()} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Print</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">PRINT</span>
                                 </button>
                                 <button onClick={() => toast({ title: "Sharing not implemented" })} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-teal-100 text-teal-600 group-hover:bg-teal-200 transition-colors"><Share2 className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Share</span>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">SHARE</span>
                                 </button>
                             </div>
                         </CardContent>
@@ -617,8 +616,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                               
                               const printHiddenClass = isInternal && !showIncomeExpenseInPrint ? 'print:hidden' : '';
 
-                              const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income'].includes(t.type) || effect > 0;
-                              const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give'].includes(t.type) || effect < 0;
+                              const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
+                              const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
                               return (
                                 <TableRow key={t.id} className={cn("group hover:bg-muted/30", printHiddenClass)}>
@@ -629,6 +628,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 <Badge variant="outline" className="text-[8px] h-4 uppercase">{t.type.replace('_', ' ')}</Badge>
                                                 {t.accountId && <Badge variant="secondary" className="text-[8px] h-4">{getAccountName(t.accountId)}</Badge>}
+                                                {t.payments && t.payments.map((p, pIdx) => (
+                                                    <Badge key={pIdx} variant="secondary" className="text-[8px] h-4">
+                                                        {getAccountName(p.accountId)} {p.amount > 0 && `(${formatAmount(p.amount, false)})`}
+                                                    </Badge>
+                                                ))}
                                                 {t.via && <Badge variant="outline" className="text-[8px] h-4 border-primary/20 text-primary">{t.via}</Badge>}
                                             </div>
                                         </div>
@@ -805,8 +809,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                 const isInternal = effect === 0;
                                 if (isInternal && !showIncomeExpenseInPrint) return null;
 
-                                const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income'].includes(t.type) || effect > 0;
-                                const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give'].includes(t.type) || effect < 0;
+                                const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
+                                const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
                                 return (
                                     <TableRow key={`print-${t.id}`} className="border-b border-slate-100">

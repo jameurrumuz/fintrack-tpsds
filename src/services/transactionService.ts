@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -249,12 +248,14 @@ export async function restoreData(data: any): Promise<void> {
 }
 
 export function subscribeToPendingPayments(onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    if (!db) return () => {};
     const coll = collection(db, 'transactions');
     const q = query(coll, where('paymentStatus', '==', 'pending'));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
 }
 
 export function subscribeToNewOnlineOrders(onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    if (!db) return () => {};
     const coll = collection(db, 'transactions');
     const q = query(coll, where('status', '==', 'pending'), where('adminNotified', '==', false));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
@@ -279,6 +280,7 @@ export async function updateTransactionByDetails(details: string, updates: Parti
 }
 
 export function subscribeToTransactionsForVerification(staffId: string, onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    if (!db) return () => {};
     const coll = collection(db, 'transactions');
     const q = query(coll, where('paymentStatus', '==', 'pending'));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
@@ -290,6 +292,7 @@ export async function handleSmsNotification(transaction: Transaction, party: Par
 }
 
 export function subscribeToTransactionsForPartyIds(ids: string[], onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    if (!db || ids.length === 0) return () => {};
     const coll = collection(db, 'transactions');
     const q = query(coll, where('partyId', 'in', ids));
     return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError);
