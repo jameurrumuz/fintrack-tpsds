@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Sidebar, SidebarHeader, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, useSidebar } from '@/components/ui/sidebar';
-import { ArrowRightLeft, Archive, Banknote, Users, FileText, CheckSquare, FilePlus, ShoppingCart, Settings, FileStack, Shield, History, WalletCards, Wrench, HeartPulse, Home, Gift, Bell, CalendarClock, Bot, Undo, Notebook, Lock, Contact2, ClipboardCheck, Briefcase, AlertTriangle, Search, MessageSquareWarning, Wrench as ToolkitIcon, Construction, Shapes, Store, BookOpen, Database, Dumbbell, Package, HardDriveDownload } from 'lucide-react';
+import { ArrowRightLeft, Archive, Banknote, Users, FileText, CheckSquare, FilePlus, ShoppingCart, Settings, FileStack, Shield, History, WalletCards, Wrench, HeartPulse, Home, Gift, Bell, CalendarClock, Bot, Undo, Notebook, Lock, Contact2, ClipboardCheck, Briefcase, AlertTriangle, Search, MessageSquareWarning, Wrench as ToolkitIcon, Construction, Shapes, Store, BookOpen, Database, Dumbbell, Package, HardDriveDownload, ShieldCheck } from 'lucide-react';
 
 const navItems = [
     { href: "/", label: "Home", icon: <Home className="h-4 w-4" /> },
@@ -31,6 +31,7 @@ const navItems = [
     { href: "/tools", label: "Tools", icon: <ToolkitIcon className="h-4 w-4" /> },
     { href: "/toolkit", label: "Toolkit", icon: <ToolkitIcon className="h-4 w-4" /> },
     { href: "/backupandrestore", label: "Backup & Restore", icon: <HardDriveDownload className="h-4 w-4" /> },
+    { href: "/rules-privacy", label: "Rules & Privacy", icon: <ShieldCheck className="h-4 w-4" /> },
     { href: "/widgets", label: "Widgets", icon: <Shapes className="h-4 w-4" /> },
     { href: "/telegram-notification", label: "Telegram Notification", icon: <MessageSquareWarning className="h-4 w-4" /> },
     { href: "/ecare", label: "Ecare", icon: <HeartPulse className="h-4 w-4" /> },
