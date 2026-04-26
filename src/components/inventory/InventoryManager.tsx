@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -13,9 +12,9 @@ import {
   addInventoryCategory, 
   deleteInventoryCategory,
   recalculateStockForItem, 
+  recalculateAllStocks,
   importInventoryFromCSV 
 } from '@/services/inventoryService';
-import { recalculateAllFifoAndProfits } from '@/services/transactionService';
 import { subscribeToParties } from '@/services/partyService';
 import { uploadImage } from '@/services/storageService';
 import { useToast } from '@/hooks/use-toast';
@@ -104,7 +103,6 @@ export const StockAdjustmentDialog = ({ item, open, onOpenChange, appSettings }:
                     toast({ variant: 'destructive', title: 'Invalid Locations', description: 'Please select two different locations for a transfer.' });
                     return;
                 }
-                // Record two movements for a transfer
                 await recordInventoryMovement(item.id, 'transfer', -quantity, `Transfer to ${toLocation}. ${notes}`, `TRN-${Date.now()}`, fromLocation);
                 await recordInventoryMovement(item.id, 'transfer', quantity, `Transfer from ${fromLocation}. ${notes}`, `TRN-${Date.now()}`, toLocation);
             } else {
@@ -347,8 +345,7 @@ export const ItemFormDialog = ({
             
             prevItemIdRef.current = item?.id;
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, item, reset]);
+    }, [open, item, reset, categories, appSettings, imageFile]);
 
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -387,7 +384,7 @@ export const ItemFormDialog = ({
                             <div className="flex flex-col items-center gap-4">
                                 <Avatar className="h-24 w-24 rounded-lg">
                                 <AvatarImage src={imagePreview || undefined} alt="Item image" />
-                                <AvatarFallback className="rounded-lg"><ImageIcon className="h-10 w-10 text-muted-foreground" /></AvatarFallback>
+                                <AvatarFallback><ImageIcon className="h-10 w-10 text-muted-foreground" /></AvatarFallback>
                                 </Avatar>
                                 <div className="flex gap-2">
                                     <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> Upload</Button>
@@ -580,10 +577,10 @@ export default function InventoryManager() {
   
    const handleGlobalRecalculate = async () => {
       setIsRecalculating(true);
-      toast({ title: 'Global Recalculation Started', description: 'Recalculating all stock and profits. This may take some time...' });
+      toast({ title: 'Global Recalculation Started', description: 'Recalculating all stock balances. This may take some time...' });
       try {
-        const result = await recalculateAllFifoAndProfits();
-        toast({ title: 'Recalculation Complete!', description: `${result.updatedTransactions} sales transactions were re-costed and ${result.updatedItems} inventory items were updated.` });
+        const result = await recalculateAllStocks();
+        toast({ title: 'Recalculation Complete!', description: `${result.updatedItems} inventory items were updated.` });
       } catch (error: any) {
         toast({ variant: 'destructive', title: 'Recalculation Failed', description: error.message });
       } finally {
@@ -758,7 +755,6 @@ const handleSaveItem = async (data: ItemFormValues, item: InventoryItem | null, 
             <CardContent className="p-3 flex-grow flex flex-col justify-between">
                 <div>
                     <Badge variant="outline" className="mb-1">{item.category}</Badge>
-                    {/* The name is now on the image */}
                 </div>
                 <div className="flex justify-between items-end mt-2">
                     <p className="font-semibold text-base">{formatAmount(item.price)}</p>
@@ -870,7 +866,6 @@ const handleSaveItem = async (data: ItemFormValues, item: InventoryItem | null, 
         open={isItemDialogOpen} 
         onOpenChange={(open) => {
             setIsItemDialogOpen(open);
-            // If we're closing the dialog, clear the edit item and URL param
             if (!open) {
                 setEditingItem(null);
                 router.replace('/inventory', { scroll: false });
@@ -879,7 +874,7 @@ const handleSaveItem = async (data: ItemFormValues, item: InventoryItem | null, 
         onSave={handleSaveItem} 
         item={editingItem} 
         categories={categories} 
-        parties={[]} // Suppliers can be added later
+        parties={[]}
         allItems={items}
         appSettings={appSettings}
       />
@@ -910,7 +905,7 @@ const handleSaveItem = async (data: ItemFormValues, item: InventoryItem | null, 
                     </div>
                      <AlertDialog>
                         <AlertDialogTrigger asChild><Button variant="destructive" disabled={isRecalculating}>{isRecalculating ? <Loader2 className="animate-spin mr-2"/> : <DatabaseZap className="mr-2"/>} Recalculate All</Button></AlertDialogTrigger>
-                        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirm Global Recalculation</AlertDialogTitle><AlertDialogDescriptionComponent>This will recalculate all item stocks based on historical sales and purchases. It will also update the cost on sale transactions using FIFO. Use this if you find major discrepancies. This can take a while.</AlertDialogDescriptionComponent></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleGlobalRecalculate}>Recalculate</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirm Global Recalculation</AlertDialogTitle><AlertDialogDescriptionComponent>This will recalculate all item stocks based on historical sales and purchases. Use this if you find major discrepancies. This can take a while.</AlertDialogDescriptionComponent></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleGlobalRecalculate}>Recalculate</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                     </AlertDialog>
                      <Button onClick={() => { setEditingItem(null); setIsItemDialogOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Add Item</Button>
                  </div>

@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -26,7 +24,6 @@ const getTransactionsCollection = () => {
     if (!db) return null;
     return collection(db, 'transactions');
 }
-
 
 // Helper to convert Firestore Timestamps
 export const mapDocToInventoryItem = (doc: any): InventoryItem => {
@@ -66,7 +63,7 @@ export async function addInventoryItem(item: Omit<InventoryItem, 'id'>): Promise
   
   const docData = {
     ...item,
-    imageUrl: item.imageUrl || null, // Ensure imageUrl is not undefined
+    imageUrl: item.imageUrl || null,
     createdAt: now,
     updatedAt: now,
   };
@@ -84,7 +81,6 @@ export async function updateInventoryItem(id: string, data: Partial<Omit<Invento
         updatedAt: serverTimestamp()
     };
     
-    // Create a clean object with only defined values
     Object.keys(data).forEach(key => {
         const typedKey = key as keyof typeof data;
         if (data[typedKey] !== undefined) {
@@ -92,7 +88,6 @@ export async function updateInventoryItem(id: string, data: Partial<Omit<Invento
         }
     });
 
-    // Ensure numeric fields are numbers
     if (updateData.price !== undefined) updateData.price = Number(updateData.price) || 0;
     if (updateData.cost !== undefined) updateData.cost = Number(updateData.cost) || 0;
     if (updateData.minStockLevel !== undefined) updateData.minStockLevel = Number(updateData.minStockLevel) || 0;
@@ -133,7 +128,7 @@ export async function deleteInventoryItem(id: string): Promise<void> {
 export async function recordInventoryMovement(
   itemId: string,
   type: InventoryMovement['type'],
-  quantityChange: number, // Positive for addition, negative for subtraction
+  quantityChange: number,
   notes: string = '',
   reference?: string,
   location?: string
@@ -159,7 +154,6 @@ export async function recordInventoryMovement(
 
     currentStock[defaultLocation] = newLocationQty;
 
-    // Recalculate total quantity from the stock map
     const totalQuantity = Object.values(currentStock).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0);
     
     transaction.update(itemRef, { stock: currentStock, quantity: totalQuantity, updatedAt: serverTimestamp() });
@@ -199,15 +193,11 @@ export async function updateStockAdjustment(adjustmentId: string, newQuantity: n
         const defaultLocation = location || 'default';
         const locationQty = currentStock[defaultLocation] || 0;
         
-        // Revert the old adjustment and apply the new one
         const newLocationQty = locationQty - oldQuantity + newQuantity;
         currentStock[defaultLocation] = newLocationQty;
         const totalQuantity = Object.values(currentStock).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0);
 
-        // Update inventory item
         transaction.update(itemRef, { stock: currentStock, quantity: totalQuantity, updatedAt: serverTimestamp() });
-        
-        // Update the adjustment record
         transaction.update(adjustmentRef, { quantity: newQuantity, notes: newNotes, date: serverTimestamp() });
     });
 }
@@ -233,7 +223,6 @@ export async function deleteStockAdjustment(adjustmentId: string): Promise<void>
             const defaultLocation = location || 'default';
             const locationQty = currentStock[defaultLocation] || 0;
 
-            // Revert the adjustment
             const newLocationQty = locationQty - quantity;
             currentStock[defaultLocation] = newLocationQty;
             const totalQuantity = Object.values(currentStock).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0);
@@ -241,88 +230,118 @@ export async function deleteStockAdjustment(adjustmentId: string): Promise<void>
             transaction.update(itemRef, { stock: currentStock, quantity: totalQuantity, updatedAt: serverTimestamp() });
         }
         
-        // Delete the adjustment record
         transaction.delete(adjustmentRef);
     });
 }
 
+export const getInventoryEffect = (type: Transaction['type']): 'in' | 'out' | null => {
+    if (['purchase', 'credit_purchase', 'sale_return'].includes(type)) return 'in';
+    if (['sale', 'credit_sale', 'purchase_return'].includes(type)) return 'out';
+    return null;
+}
 
 export async function recalculateStockForItem(itemId: string): Promise<void> {
-  const transactionsCollection = getTransactionsCollection();
-  const inventoryMovementsCollection = getInventoryMovementsCollection();
-  if (!db || !transactionsCollection || !inventoryMovementsCollection) {
-    throw new Error('Firebase is not configured.');
-  }
+  if (!db) throw new Error('Firebase is not configured.');
 
-  // 1. Run inside a transaction ensures no race conditions during write
-  await runTransaction(db, async (transaction) => {
-    // Get current Item first
-    const itemRef = doc(db, 'inventory', itemId);
-    const itemSnap = await transaction.get(itemRef);
-    if (!itemSnap.exists()) throw new Error("Item not found");
+  // Fetch data
+  const txSnap = await getDocs(collection(db, 'transactions'));
+  const movSnap = await getDocs(query(collection(db, 'inventoryMovements'), where('itemId', '==', itemId)));
+  
+  const stockByLocation: { [location: string]: number } = {};
 
-    // Fetch all related data
-    // Note: In a large app, fetching ALL transactions is heavy. 
-    // Consider adding 'itemId' array in transactions for direct querying if possible.
-    const allTransactionsQuery = query(collection(db, 'transactions')); 
-    const movementsQuery = query(inventoryMovementsCollection, where('itemId', '==', itemId));
+  // Process Transactions
+  txSnap.docs.forEach(doc => {
+    const tx = doc.data() as Transaction;
+    if (!tx.enabled || !tx.items) return;
+    if ((tx as any).status === 'cancelled') return;
 
-    // We have to use getDocs here (Limitations of client SDK inside transaction for queries)
-    // Ideally, calculate this via Cloud Functions for better performance.
-    const [allTransactionsSnap, movementsSnap] = await Promise.all([
-      getDocs(allTransactionsQuery),
-      getDocs(movementsQuery)
-    ]);
-    
-    const stockByLocation: { [location: string]: number } = {};
-
-    // --- Process Transactions (Sales/Purchases) ---
-    allTransactionsSnap.docs.forEach(doc => {
-      const tx = doc.data() as Transaction;
-      
-      const isCancelled = (tx as any).status === 'cancelled';
-      if (!tx.enabled || isCancelled || !tx.items) return;
-
-      tx.items.forEach(item => {
-        if (item.id === itemId) {
-          const location = item.location || 'default';
-          if (!stockByLocation[location]) stockByLocation[location] = 0;
-          
-          const effect = getInventoryEffect(tx.type);
-          
-          const qty = Number(item.quantity) || 0;
-
-          if (effect === 'in') {
-            stockByLocation[location] += qty;
-          } else if (effect === 'out') {
-            stockByLocation[location] -= qty;
-          }
-        }
-      });
+    tx.items.forEach(item => {
+      if (item.id === itemId) {
+        const loc = item.location || 'default';
+        if (!stockByLocation[loc]) stockByLocation[loc] = 0;
+        
+        const effect = getInventoryEffect(tx.type);
+        if (effect === 'in') stockByLocation[loc] += item.quantity;
+        else if (effect === 'out') stockByLocation[loc] -= item.quantity;
+      }
     });
+  });
 
-    // --- Process Movements (Adjustments/Transfers) ---
-    movementsSnap.docs.forEach(doc => {
-      const mov = doc.data() as InventoryMovement;
-      const location = mov.location || 'default';
-      
-      if (!stockByLocation[location]) stockByLocation[location] = 0;
-      
-      stockByLocation[location] += (Number(mov.quantity) || 0);
-    });
+  // Process Adjustments
+  movSnap.docs.forEach(doc => {
+    const mov = doc.data() as InventoryMovement;
+    const loc = mov.location || 'default';
+    if (!stockByLocation[loc]) stockByLocation[loc] = 0;
+    stockByLocation[loc] += (Number(mov.quantity) || 0);
+  });
 
-    const totalQuantity = Object.values(stockByLocation).reduce((sum: number, qty: any) => sum + (Number(qty) || 0), 0);
+  const totalQuantity = Object.values(stockByLocation).reduce((sum, q) => sum + q, 0);
 
-    // Update with the fresh calculation
-    transaction.update(itemRef, {
-      stock: stockByLocation,
-      quantity: totalQuantity,
-      updatedAt: serverTimestamp(),
-    });
+  const itemRef = doc(db, 'inventory', itemId);
+  await updateDoc(itemRef, {
+    stock: stockByLocation,
+    quantity: totalQuantity,
+    updatedAt: serverTimestamp(),
   });
 }
 
+export async function recalculateAllStocks(): Promise<{ updatedItems: number }> {
+    if (!db) throw new Error("Firebase not configured.");
+    
+    // Fetch everything once
+    const [itemsSnap, txSnap, movSnap] = await Promise.all([
+        getDocs(collection(db, 'inventory')),
+        getDocs(collection(db, 'transactions')),
+        getDocs(collection(db, 'inventoryMovements'))
+    ]);
 
+    const batch = writeBatch(db);
+    let updatedCount = 0;
+
+    itemsSnap.docs.forEach(itemDoc => {
+        const itemId = itemDoc.id;
+        const stockByLocation: { [location: string]: number } = {};
+
+        // Transactions
+        txSnap.docs.forEach(tDoc => {
+            const tx = tDoc.data() as Transaction;
+            if (!tx.enabled || !tx.items) return;
+            if ((tx as any).status === 'cancelled') return;
+
+            tx.items.forEach(it => {
+                if (it.id === itemId) {
+                    const loc = it.location || 'default';
+                    if (!stockByLocation[loc]) stockByLocation[loc] = 0;
+                    const effect = getInventoryEffect(tx.type);
+                    if (effect === 'in') stockByLocation[loc] += it.quantity;
+                    else if (effect === 'out') stockByLocation[loc] -= it.quantity;
+                }
+            });
+        });
+
+        // Adjustments
+        movSnap.docs.forEach(mDoc => {
+            const mov = mDoc.data() as InventoryMovement;
+            if (mov.itemId === itemId) {
+                const loc = mov.location || 'default';
+                if (!stockByLocation[loc]) stockByLocation[loc] = 0;
+                stockByLocation[loc] += (Number(mov.quantity) || 0);
+            }
+        });
+
+        const totalQty = Object.values(stockByLocation).reduce((sum, q) => sum + q, 0);
+
+        batch.update(itemDoc.ref, {
+            stock: stockByLocation,
+            quantity: totalQty,
+            updatedAt: serverTimestamp()
+        });
+        updatedCount++;
+    });
+
+    await batch.commit();
+    return { updatedItems: updatedCount };
+}
 
 export function subscribeToStockAdjustments(
   onUpdate: (movements: InventoryMovement[]) => void,
@@ -334,7 +353,6 @@ export function subscribeToStockAdjustments(
     return () => {};
   }
   
-  // Query both 'adjustment' and 'transfer' types
   const q = query(inventoryMovementsCollection, where('type', 'in', ['adjustment', 'transfer']));
   
   return onSnapshot(q, (snapshot) => {
@@ -346,7 +364,6 @@ export function subscribeToStockAdjustments(
         date: (data.date as Timestamp)?.toDate ? (data.date as Timestamp).toDate().toISOString() : new Date().toISOString(),
       } as InventoryMovement;
     });
-    // Sort on the client-side
     movements.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     onUpdate(movements);
   }, onError as any);
@@ -384,21 +401,18 @@ export async function deleteInventoryCategory(id: string): Promise<void> {
 // --- CSV Import ---
 export async function importInventoryFromCSV(data: any[]): Promise<void> {
   const inventoryCollection = getInventoryCollection();
-  const movementsCollection = getInventoryMovementsCollection(); // Need this for audit
+  const movementsCollection = getInventoryMovementsCollection();
   if (!db || !inventoryCollection || !movementsCollection) throw new Error("Firebase not configured.");
 
   const batch = writeBatch(db);
 
-  // 1. Wipe existing inventory (CAUTION: This deletes everything)
   const existingItemsSnap = await getDocs(inventoryCollection);
   existingItemsSnap.forEach(doc => batch.delete(doc.ref));
 
-  // 2. Add new items from CSV
   data.forEach(row => {
-    const newItemRef = doc(inventoryCollection); // Generate ID first
+    const newItemRef = doc(inventoryCollection);
     const itemId = newItemRef.id;
     
-    // FIX: Read quantity from CSV
     const initialQty = Number(row.quantity) || 0;
     const location = row.location || 'default';
 
@@ -412,10 +426,8 @@ export async function importInventoryFromCSV(data: any[]): Promise<void> {
       category: row.category || 'Uncategorized',
       price: parseFloat(row.price) || 0,
       cost: parseFloat(row.cost) || 0,
-      
-      quantity: initialQty, // FIX: Set correct quantity
-      stock: stockMap,      // FIX: Set correct stock map
-      
+      quantity: initialQty,
+      stock: stockMap,
       minStockLevel: parseInt(row.minStockLevel) || 0,
       brand: row.brand || '',
       description: row.description || '',
@@ -430,13 +442,11 @@ export async function importInventoryFromCSV(data: any[]): Promise<void> {
 
     batch.set(newItemRef, newItem);
 
-    // OPTIONAL BUT RECOMMENDED: 
-    // Create an "Opening Stock" movement record so 'recalculateStockForItem' works later
     if (initialQty !== 0) {
         const moveRef = doc(movementsCollection);
         batch.set(moveRef, {
             itemId: itemId,
-            type: 'adjustment', // or 'opening_stock'
+            type: 'adjustment',
             quantity: initialQty,
             date: serverTimestamp(),
             reference: 'CSV-IMPORT',
@@ -447,12 +457,4 @@ export async function importInventoryFromCSV(data: any[]): Promise<void> {
   });
 
   await batch.commit();
-}
-
-
-
-export const getInventoryEffect = (type: Transaction['type']): 'in' | 'out' | null => {
-    if (['purchase', 'credit_purchase', 'sale_return'].includes(type)) return 'in';
-    if (['sale', 'credit_sale', 'purchase_return'].includes(type)) return 'out';
-    return null;
 }
