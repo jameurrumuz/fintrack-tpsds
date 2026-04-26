@@ -198,7 +198,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime());
+    // Sort groupedArray Ascending: Oldest date at top, newest at bottom
+    const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
         groupedTransactions: groupedArray, 
@@ -738,7 +739,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 <div className="flex gap-4">
                      {businessProfile?.logoUrl && (
                         <div className="relative h-16 w-16">
-                            <Image src={businessProfile.logoUrl} alt="Logo" fill className="object-contain" />
+                            <Image src={businessProfile.logoUrl} alt="Logo" width={64} height={64} className="object-contain" />
                         </div>
                      )}
                      <div>
@@ -834,6 +835,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     </TableRow>
                 </TableFooter>
             </Table>
+            
+            {/* Signature Area */}
+            <div className="mt-16 flex justify-end">
+                <div className="text-center w-48">
+                    <div className="border-t border-black pt-2">
+                        <p className="font-bold text-xs uppercase tracking-widest">Authorized Signature</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
   );
