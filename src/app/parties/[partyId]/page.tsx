@@ -5,19 +5,20 @@ import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Transaction, Party, Account, AppSettings } from '@/types';
+import type { Transaction, Party, Account, AppSettings, TransactionVia, SheetRow } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
 import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction } from '@/services/transactionService';
 import { getAppSettings } from '@/services/settingsService';
+import { fetchSheetData } from '@/services/smsSyncService';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { formatAmount, formatDate, getPartyBalanceEffect, cn } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, ChevronDown, Share2, Landmark, Briefcase, FileText, PiggyBank, Scale, History } from 'lucide-react';
+import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, User, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, Briefcase, FileText, History, Search, X, Save } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -31,6 +32,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { format as formatFns } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -39,6 +41,8 @@ const partyTransactionSchema = z.object({
   accountId: z.string().optional(),
   type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale', 'credit_give', 'credit_income']),
   via: z.string().optional(),
+  charge: z.coerce.number().optional(),
+  chargeVia: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (['give', 'receive', 'sale', 'purchase', 'spent', 'income'].includes(data.type)) {
         if (!data.accountId) {
@@ -72,6 +76,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
   const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  
+  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false);
+  const [smsData, setSmsData] = useState<SheetRow[]>([]);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [sendSms, setSendSms] = useState(true);
 
   const transactionForm = useForm<FormValues>({
     resolver: zodResolver(partyTransactionSchema),
@@ -82,6 +91,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       amount: '' as any,
       accountId: '',
       via: '',
+      charge: 0,
+      chargeVia: '',
     },
   });
 
@@ -93,6 +104,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           const data = snap.data();
           setParty({ id: snap.id, ...data } as Party);
           transactionForm.setValue('via', data.group || 'Personal');
+          transactionForm.setValue('chargeVia', data.group || 'Personal');
         }
       });
       getAppSettings().then(setAppSettings);
@@ -153,16 +165,43 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const handleAddTransaction = async (data: FormValues) => {
     if (!party) return;
     try {
+        const dateStr = formatFns(data.date, 'yyyy-MM-dd');
+        
+        // Main Transaction
         await addTransaction({
             ...data,
-            date: formatFns(data.date, 'yyyy-MM-dd'),
+            date: dateStr,
             partyId: party.id,
             enabled: true,
             via: data.via || 'Personal',
+            sendSms: sendSms,
         });
+
+        // Charge Transaction (if any)
+        if (data.charge && data.charge > 0) {
+            await addTransaction({
+                date: dateStr,
+                description: `Charge for: ${data.description}`,
+                amount: data.charge,
+                type: 'spent',
+                accountId: data.accountId,
+                via: data.chargeVia || data.via || 'Personal',
+                enabled: true,
+            });
+        }
+
         toast({ title: "Success", description: "Transaction added successfully." });
         setIsFormOpen(false);
-        transactionForm.reset();
+        transactionForm.reset({
+            date: new Date(),
+            description: '',
+            type: 'receive',
+            amount: '' as any,
+            accountId: accounts.find(a => a.name.toLowerCase() === 'cash')?.id || accounts[0]?.id || '',
+            via: party.group || 'Personal',
+            charge: 0,
+            chargeVia: party.group || 'Personal',
+        });
     } catch (error: any) {
         toast({ variant: 'destructive', title: "Error", description: error.message });
     }
@@ -184,6 +223,30 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     } catch (error: any) { toast({ variant: 'destructive', title: "Error", description: error.message }); }
   };
 
+  const handleSmsSearch = async () => {
+      setSmsLoading(true);
+      setIsSmsDialogOpen(true);
+      try {
+          const data = await fetchSheetData();
+          setSmsData(data);
+      } catch (e: any) {
+          toast({ variant: 'destructive', title: 'SMS Fetch Failed', description: e.message });
+      } finally {
+          setSmsLoading(false);
+      }
+  };
+
+  const handleSelectSms = (sms: SheetRow) => {
+      const amountRegex = /((?:tk|taka|bdt|rs|৳)\.?\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:tk|taka|bdt|rs|৳))/i;
+      const match = sms.message.match(amountRegex);
+      if (match) {
+          const amountStr = (match[2] || match[3]).replace(/,/g, '');
+          transactionForm.setValue('amount', parseFloat(amountStr));
+      }
+      transactionForm.setValue('description', sms.message);
+      setIsSmsDialogOpen(false);
+  };
+
   const openReceiveForm = (type: 'receive' | 'credit_income' | 'advance') => {
       if (type === 'advance') {
           setIsReceiveOptionsOpen(false);
@@ -192,7 +255,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       }
       setFormType('receive');
       transactionForm.setValue('type', type);
-      transactionForm.setValue('description', '');
+      transactionForm.setValue('description', `Received from ${party?.name}`);
       setIsReceiveOptionsOpen(false);
       setIsFormOpen(true);
   }
@@ -200,7 +263,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const openGiveForm = (type: 'give' | 'credit_give') => {
       setFormType('give');
       transactionForm.setValue('type', type);
-      transactionForm.setValue('description', '');
+      transactionForm.setValue('description', `Paid to ${party?.name}`);
       setIsGiveOptionsOpen(false);
       setIsFormOpen(true);
   }
@@ -211,6 +274,30 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         
+        {/* SMS Search Dialog */}
+        <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+                <DialogHeader><DialogTitle>Search SMS for Quick Entry</DialogTitle></DialogHeader>
+                <div className="flex-grow overflow-y-auto p-2">
+                    {smsLoading ? <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div> : (
+                        <Table>
+                            <TableBody>
+                                {smsData.map((sms, i) => (
+                                    <TableRow key={i} className="cursor-pointer hover:bg-muted" onClick={() => handleSelectSms(sms)}>
+                                        <TableCell className="text-xs">
+                                            <p className="font-bold">{sms.name}</p>
+                                            <p>{sms.message}</p>
+                                            <p className="text-[10px] text-muted-foreground">{sms.date}</p>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+
         <Dialog open={isReceiveOptionsOpen} onOpenChange={setIsReceiveOptionsOpen}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
@@ -253,29 +340,48 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </DialogContent>
         </Dialog>
 
+        {/* Main Entry Dialog */}
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogContent>
-                <DialogHeader><DialogTitle>Record {formType === 'give' ? 'Payment Given' : 'Payment Received'}</DialogTitle></DialogHeader>
-                <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-4">
+            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>Record Payment {formType === 'give' ? 'Given' : 'Received'}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-2">
+                    <div className="flex justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={handleSmsSearch}>
+                            <Search className="h-4 w-4 mr-2"/> Search SMS
+                        </Button>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1"><Label>Amount</Label><Input type="number" step="0.01" {...transactionForm.register('amount')} autoFocus /></div>
-                        <div className="space-y-1"><Label>Date</Label>
+                        <div className="space-y-1">
+                            <Label>Amount</Label>
+                            <Input type="number" step="0.01" {...transactionForm.register('amount')} autoFocus />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Date</Label>
                             <Controller control={transactionForm.control} name="date" render={({ field }) => (<DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />)} />
                         </div>
                     </div>
-                    <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} placeholder="Reason for transaction" /></div>
+                    <div className="space-y-1">
+                        <Label>Description</Label>
+                        <Input {...transactionForm.register('description')} placeholder="Reason for transaction" />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                         {!['credit_give', 'credit_income'].includes(transactionForm.watch('type')) && (
-                            <div className="space-y-1"><Label>Account</Label>
+                            <div className="space-y-1">
+                                <Label>Account</Label>
                                 <Controller name="accountId" control={transactionForm.control} render={({ field }) => (
                                     <Select onValueChange={field.onChange} value={field.value}>
-                                        <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
-                                        <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
+                                        <SelectTrigger><SelectValue placeholder="Account..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name} ({formatAmount(acc.balance)})</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
                                 )} />
                             </div>
                         )}
-                         <div className="space-y-1"><Label>Business Profile</Label>
+                         <div className="space-y-1">
+                            <Label>Profile (Via)</Label>
                              <Controller name="via" control={transactionForm.control} render={({ field }) => (
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -284,7 +390,37 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             )} />
                         </div>
                     </div>
-                    <DialogFooter><Button type="submit">Save Transaction</Button></DialogFooter>
+                    
+                    <Separator />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <Label>Charge</Label>
+                            <Input type="number" step="0.01" {...transactionForm.register('charge')} placeholder="0.00" />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Charge Via</Label>
+                             <Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 py-2">
+                        <Switch id="send-sms-ledger" checked={sendSms} onCheckedChange={setSendSms} />
+                        <Label htmlFor="send-sms-ledger">Send SMS</Label>
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                        <Button type="submit" disabled={isSaving}>
+                            {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Save className="mr-2 h-4 w-4"/>}
+                            Save
+                        </Button>
+                    </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
