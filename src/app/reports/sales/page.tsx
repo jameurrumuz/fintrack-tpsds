@@ -1,8 +1,6 @@
-
-
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,9 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
-
 
 const MultiPartySelect = ({ parties, selected, onChange }: { parties: Party[], selected: string[], onChange: (selected: string[]) => void }) => {
     const [open, setOpen] = useState(false);
@@ -147,25 +144,27 @@ const MultiProductSelect = ({ items, selected, onChange }: { items: InventoryIte
 };
 
 
-export default function SalesReport() {
+function SalesReportContent() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [filters, setFilters] = useState(() => {
     const today = formatFns(new Date(), 'yyyy-MM-dd');
     return {
-      dateFrom: today,
-      dateTo: today,
-      via: 'all',
+      dateFrom: searchParams.get('from') || today,
+      dateTo: searchParams.get('to') || today,
+      via: searchParams.get('via') || 'all',
       partyIds: [] as string[],
       productIds: [] as string[],
     };
   });
   const { toast } = useToast();
-  const router = useRouter();
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -336,5 +335,13 @@ export default function SalesReport() {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+export default function SalesReportPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+      <SalesReportContent />
+    </Suspense>
   );
 }

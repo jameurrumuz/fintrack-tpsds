@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { uploadImage } from '@/services/storageService';
 import Link from 'next/link';
 
-
+// ... (schema and sub-components remain same)
 const paymentInstructionSchema = z.object({
   method: z.string().min(1, 'Method is required'),
   number: z.string().min(1, 'Number is required'),
@@ -487,7 +487,6 @@ export const ServiceFormDialog = ({
   );
 };
 
-
 const PIN_STORAGE_KEY = 'app-security-pin';
 const DEFAULT_PIN = '0035';
 const getPin = (): string => {
@@ -560,7 +559,7 @@ const ChangePinDialog = ({ open, onOpenChange }: { open: boolean, onOpenChange: 
     )
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const [loading, setLoading] = useState(true);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [portalUrl, setPortalUrl] = useState('');
@@ -573,7 +572,6 @@ export default function SettingsPage() {
   const [editingService, setEditingService] = useState<CustomerService | null>(null);
   const [editingServiceType, setEditingServiceType] = useState<'product' | 'payment'>('product');
   
-  // Keep appSettings in a separate state to pass to dialogs
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [imageFiles, setImageFiles] = useState<Record<number, File | null>>({});
   const [imagePreviews, setImagePreviews] = useState<Record<number, string>>({});
@@ -628,10 +626,6 @@ export default function SettingsPage() {
       control: form.control,
       name: "expenseBooks",
   });
-  const { fields: tradeLicenceFields, append: appendTradeLicenceField, remove: removeTradeLicenceField } = useFieldArray({
-    control: form.control,
-    name: "tradeLicenceFieldOrder",
-  });
   
   const [newPartyType, setNewPartyType] = useState('');
   const [newPartyGroup, setNewPartyGroup] = useState('');
@@ -641,14 +635,13 @@ export default function SettingsPage() {
   const watchedSettings = form.watch();
 
   useEffect(() => {
-    // This effect runs only on the client side
     setPortalUrl(`${window.location.origin}/portal/login`);
     
     async function loadSettings() {
       setLoading(true);
       try {
         const settings = await getAppSettings();
-        setAppSettings(settings); // Set the separate state
+        setAppSettings(settings);
         if (settings) {
           form.reset({
             ...settings,
@@ -669,7 +662,6 @@ export default function SettingsPage() {
             pushbulletDeviceId: settings.pushbulletDeviceId || '',
           });
 
-          // Set initial image previews
           const previews: Record<number, string> = {};
           (settings.businessProfiles || []).forEach((profile, index) => {
             if (profile.logoUrl) {
@@ -765,13 +757,12 @@ export default function SettingsPage() {
             })),
             expenseBooks: data.expenseBooks || [],
             tradeLicenceFieldOrder: data.tradeLicenceFieldOrder || [],
-            // Ensure smsTemplates is an array of objects
             smsTemplates: (data.smsTemplates || []).map(t => ({ id: t.id, type: t.type, message: t.message })),
             newsCategories: appSettings?.newsCategories || [],
         };
         
         await saveAppSettings(cleanUndefined(finalSettings));
-        setAppSettings(finalSettings); // Update local state so future changes use updated base
+        setAppSettings(finalSettings); 
         
         localStorage.setItem('app-security-question', data.securityQuestion || '');
         localStorage.setItem('app-security-answer', data.securityAnswer || '');
@@ -800,7 +791,7 @@ export default function SettingsPage() {
       toast({ title: 'Balance Recalculation Started', description: 'This may take a few moments...' });
       try {
           await recalculateBalancesFromTransaction();
-          toast({ title: 'Success!', description: 'All account and party balances have been recalculated and synced successfully.' });
+          toast({ title: 'Success!', description: 'All account and party balances have been recalculated.' });
       } catch (error: any) {
            toast({ variant: 'destructive', title: 'Error', description: error.message });
       } finally {
@@ -895,12 +886,7 @@ export default function SettingsPage() {
                             <SelectItem value="1">1 Minute</SelectItem>
                             <SelectItem value="2">2 Minutes</SelectItem>
                             <SelectItem value="3">3 Minutes</SelectItem>
-                            <SelectItem value="4">4 Minutes</SelectItem>
                             <SelectItem value="5">5 Minutes</SelectItem>
-                            <SelectItem value="6">6 Minutes</SelectItem>
-                            <SelectItem value="7">7 Minutes</SelectItem>
-                            <SelectItem value="8">8 Minutes</SelectItem>
-                            <SelectItem value="9">9 Minutes</SelectItem>
                             <SelectItem value="10">10 Minutes</SelectItem>
                         </SelectContent>
                     </Select>
@@ -952,10 +938,6 @@ export default function SettingsPage() {
                     <Controller name="smsServiceEnabled" control={form.control} render={({ field }) => (<Switch id="sms-service-toggle" checked={field.value} onCheckedChange={field.onChange} />)}/>
                     <Label htmlFor="sms-service-toggle">Enable SMS Service</Label>
                 </div>
-                 <p className="text-sm text-muted-foreground pt-2">
-                    The system will attempt to send SMS in the following priority: 1. Pushbullet, 2. SMSQ, 3. Twilio.
-                    Please configure the credentials for the services you want to use.
-                </p>
                 <div className="space-y-4">
                     <div className="space-y-2 p-4 border rounded-md">
                         <h4 className="font-semibold">Pushbullet Credentials (Priority 1)</h4>
@@ -978,9 +960,9 @@ export default function SettingsPage() {
 
                     <div className="space-y-2 p-4 border rounded-md">
                         <h4 className="font-semibold">Twilio Credentials (Priority 3)</h4>
-                        <div className="space-y-2"><Label>Twilio Account SID</Label><Input {...form.register('twilioAccountSid')} placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"/></div>
+                        <div className="space-y-2"><Label>Twilio Account SID</Label><Input {...form.register('twilioAccountSid')} /></div>
                         <div className="space-y-2"><Label>Twilio Auth Token</Label><Input type="password" {...form.register('twilioAuthToken')} /></div>
-                        <div className="space-y-2"><Label>Twilio Messaging Service SID</Label><Input {...form.register('twilioMessagingServiceSid')} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /></div>
+                        <div className="space-y-2"><Label>Twilio Messaging Service SID</Label><Input {...form.register('twilioMessagingServiceSid')} /></div>
                     </div>
                 </div>
             </CardContent>
@@ -989,7 +971,7 @@ export default function SettingsPage() {
          <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Palette/> Appearance Settings</CardTitle>
-            <CardDescription>Customize the look and feel of the application. Changes are applied live.</CardDescription>
+            <CardDescription>Customize the look and feel of the application.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
               <div className="space-y-2">
@@ -1046,7 +1028,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BookOpen/> Expense Books</CardTitle>
-            <CardDescription>Manage predefined categories for different transaction types to speed up data entry.</CardDescription>
+            <CardDescription>Manage predefined categories for different transaction types.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {expenseBookFields.map((book, bookIndex) => (
@@ -1121,7 +1103,7 @@ export default function SettingsPage() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Wrench/> Customer Service Settings</CardTitle>
-                <CardDescription>Manage customer-facing services (e.g., product sales). These will appear in the customer portal.</CardDescription>
+                <CardDescription>Manage customer-facing services (e.g., product sales).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 {productServices.map((service, index) => (
@@ -1173,7 +1155,7 @@ export default function SettingsPage() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Bot/> Auto Transaction Rules</CardTitle>
-                <CardDescription>Automate transaction creation from SMS sync based on these rules.</CardDescription>
+                <CardDescription>Automate transaction creation from SMS sync.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 {autoTxFields.map((field, index) => (
@@ -1194,7 +1176,6 @@ export default function SettingsPage() {
                         <div className="space-y-1 mt-2">
                           <Label>Keyword for Amount</Label>
                           <Input {...form.register(`autoTransactionRules.${index}.amountKeyword`)} placeholder="e.g., You have received payment Tk" />
-                          <p className="text-xs text-muted-foreground">The system will find the first number after this phrase.</p>
                         </div>
                         <div className="space-y-1 mt-2">
                              <Label>Additional Message Filter (Optional)</Label>
@@ -1216,7 +1197,7 @@ export default function SettingsPage() {
                                 )} />
                             </div>
                              <div className="space-y-1">
-                                <Label>Deposit/Withdraw To/From Account</Label>
+                                <Label>Account</Label>
                                  <Controller control={form.control} name={`autoTransactionRules.${index}.accountId`} render={({field}) => (
                                     <Select onValueChange={field.onChange} value={field.value}>
                                         <SelectTrigger><SelectValue placeholder="Select account..."/></SelectTrigger>
@@ -1277,7 +1258,7 @@ export default function SettingsPage() {
                         <Input type="file" accept="image/*" onChange={(e) => handleLogoFileChange(e, index)} />
                     </div>
                 </div>
-                <Input {...form.register(`businessProfiles.${index}.name`)} placeholder="Profile Name (e.g. Rushaib Traders)" className="font-bold" />
+                <Input {...form.register(`businessProfiles.${index}.name`)} placeholder="Profile Name" className="font-bold" />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                    <div className="space-y-1">
                       <Label>Address</Label>
@@ -1317,9 +1298,9 @@ export default function SettingsPage() {
                  <div className="p-3 border rounded-md space-y-2 bg-muted/50">
                     <Label className="text-sm font-semibold">Payment Instruction</Label>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Input {...form.register(`businessProfiles.${index}.paymentInstruction.method`)} placeholder="Method (e.g., bKash)" />
+                        <Input {...form.register(`businessProfiles.${index}.paymentInstruction.method`)} placeholder="Method" />
                         <Input {...form.register(`businessProfiles.${index}.paymentInstruction.number`)} placeholder="Number" />
-                        <Input {...form.register(`businessProfiles.${index}.paymentInstruction.type`)} placeholder="Type (e.g., Send Money)" />
+                        <Input {...form.register(`businessProfiles.${index}.paymentInstruction.type`)} placeholder="Type" />
                     </div>
                  </div>
               </div>
@@ -1334,7 +1315,6 @@ export default function SettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Party Types</CardTitle>
-                    <CardDescription>Manage the types of parties you interact with.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                     {typeFields.map((field, index) => (
@@ -1352,7 +1332,6 @@ export default function SettingsPage() {
              <Card>
                 <CardHeader>
                     <CardTitle>Party Groups</CardTitle>
-                    <CardDescription>Manage the groups for categorizing parties.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                     {groupFields.map((field, index) => (
@@ -1370,7 +1349,6 @@ export default function SettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Warehouse Locations</CardTitle>
-                    <CardDescription>Manage your inventory storage locations.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                     {(form.watch('inventoryLocations') || []).map((_, index) => (
@@ -1398,7 +1376,6 @@ export default function SettingsPage() {
       <Card className="mt-8 border-orange-500/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Database/> Data Management</CardTitle>
-            <CardDescription>Use these tools for data maintenance. Use with caution.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -1413,28 +1390,38 @@ export default function SettingsPage() {
                           <AlertDialogHeader>
                               <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                               <AlertDialogDescriptionComponent>
-                                  This action will iterate through all of your transactions and recalculate the current balance for every account. This is useful if you find a balance discrepancy, but it can be a slow operation if you have thousands of transactions.
+                                  This action will recalculate all account and party balances from history.
                               </AlertDialogDescriptionComponent>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={handleRecalculate}
-                                className={cn(buttonVariants({ variant: "destructive" }))}
-                              >
-                                Yes, Recalculate
-                              </AlertDialogAction>
+                              <AlertDialogAction onClick={handleRecalculate} className={cn(buttonVariants({ variant: "destructive" }))}>Recalculate</AlertDialogAction>
                           </AlertDialogFooter>
                       </AlertDialogContent>
                   </AlertDialog>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    If an account balance seems incorrect, this will fix it by re-calculating
-                    it from all of your transaction history.
-                  </p>
               </div>
           </CardContent>
       </Card>
       <ChangePinDialog open={isChangePinOpen} onOpenChange={setIsChangePinOpen} />
+       <ServiceFormDialog 
+            open={isServiceFormOpen}
+            onOpenChange={setIsServiceFormOpen}
+            onSave={handleSaveService}
+            service={editingService}
+            inventoryItems={inventoryItems}
+            staffList={staffList}
+            accounts={accounts}
+            allowedTypes={editingServiceType === 'product' ? ['income', 'sale'] : ['receive', 'give']}
+            appSettings={appSettings}
+        />
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
@@ -302,9 +301,9 @@ function PurchaseReportContent() {
 }
 
 export default function PurchaseReportPage() {
-    return (
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
-            <PurchaseReportContent />
-        </Suspense>
-    );
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+      <PurchaseReportContent />
+    </Suspense>
+  );
 }

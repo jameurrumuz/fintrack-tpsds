@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import * as React from 'react';
@@ -48,7 +46,7 @@ const MultiProductSelect = ({ items, selected, onChange }: { items: InventoryIte
     };
     
     const handleRemove = (e: React.MouseEvent, itemId: string) => {
-        e.stopPropagation(); // Prevent the popover from opening/closing
+        e.stopPropagation();
         const newSelected = selected.filter(id => id !== itemId);
         onChange(newSelected);
     }
@@ -58,7 +56,7 @@ const MultiProductSelect = ({ items, selected, onChange }: { items: InventoryIte
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" className="w-full justify-between font-normal h-auto min-h-10">
+                <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-auto min-h-10">
                     <div className="flex flex-wrap gap-1">
                         {selectedItems.length > 0 ? (
                              selectedItems.map(item => (
@@ -402,7 +400,7 @@ function StockInOutReportContent() {
 
 export default function StockInOutReport() {
     return (
-        <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
             <StockInOutReportContent />
         </Suspense>
     );

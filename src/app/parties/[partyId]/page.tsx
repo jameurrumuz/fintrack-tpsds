@@ -169,7 +169,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // Sort Oldest to Newest for running balance calculation
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -201,7 +200,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
-    // Final sorting for display: OLD dates at top, NEW dates at bottom as per RULES.md
+    // Sort by date ASC (Oldest first) as per RULES.md
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
@@ -736,7 +735,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
         </footer>
 
-        {/* Professional Print Layout */}
         <div ref={printAreaRef} className="hidden print:block w-full bg-white text-black p-0">
              <style>{`
                 @media print {
@@ -745,7 +743,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 }
             `}</style>
             
-            {/* Header */}
             <div className="flex justify-between items-start mb-8">
                 <div className="flex gap-4">
                      {businessProfile?.logoUrl && (
@@ -768,7 +765,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
             <Separator className="bg-slate-200 mb-8" />
 
-            {/* Customer Info & QR */}
             <div className="flex justify-between items-end mb-8 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
                 <div className="space-y-1.5">
                     <h3 className="text-2xl font-black text-slate-800 mb-2">{party.name}</h3>
@@ -791,7 +787,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </div>
             </div>
 
-            {/* Main Ledger Table */}
             <Table className="border-collapse">
                 <TableHeader>
                     <TableRow className="bg-slate-50 border-y border-slate-200">
@@ -847,7 +842,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </TableFooter>
             </Table>
             
-            {/* Signature Area */}
             <div className="mt-16 flex justify-end">
                 <div className="text-center w-48">
                     <div className="border-t border-black pt-2">

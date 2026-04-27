@@ -1,9 +1,9 @@
-
 'use client';
 
+import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { FileText, Book, Banknote, TrendingUp, TrendingDown, Package, Warehouse, ArrowRightLeft, Users, UserCheck, BarChartHorizontal, Repeat, BarChart, DollarSign, PackageCheck, ClipboardCheck, Truck, Landmark, Calculator, Gift, SlidersHorizontal, Briefcase, ShoppingCart, AlertTriangle, Target, Tags, Contact2, HandCoins, BookOpen } from 'lucide-react';
+import { FileText, Book, Banknote, TrendingUp, TrendingDown, Package, Warehouse, ArrowRightLeft, Users, UserCheck, BarChartHorizontal, Repeat, BarChart, DollarSign, PackageCheck, ClipboardCheck, Truck, Landmark, Calculator, Gift, SlidersHorizontal, Briefcase, ShoppingCart, AlertTriangle, Target, Tags, Contact2, HandCoins, BookOpen, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const reports = [
@@ -194,18 +194,11 @@ const reports = [
     href: '/reports/update-prices',
     icon: <Tags className="h-8 w-8 text-teal-500" />,
   },
-  {
-    title: 'Staff Report',
-    description: 'Review activities and tasks for staff members. (Coming Soon)',
-    href: '/reports',
-    icon: <UserCheck className="h-8 w-8 text-indigo-500" />,
-    disabled: true,
-  },
 ];
 
 export default function ReportsPage() {
   return (
-    <main>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
         <div className="mb-8">
             <h1 className="text-3xl font-bold tracking-tight">Reports Center</h1>
             <p className="text-muted-foreground mt-1">Generate and view detailed reports for your business.</p>
@@ -231,6 +224,6 @@ export default function ReportsPage() {
             </Link>
           ))}
         </div>
-      </main>
+    </Suspense>
   );
 }

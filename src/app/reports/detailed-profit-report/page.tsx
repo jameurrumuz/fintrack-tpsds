@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,17 +13,18 @@ import { formatAmount, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { parseISO } from 'date-fns';
 
-const DetailedReportPage = () => {
+function DetailedReportContent() {
     const [project, setProject] = useState<ProfitCalculationProject | null>(null);
     const [row, setRow] = useState<CalculationRow | null>(null);
     const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
     const [parties, setParties] = useState<Party[]>([]);
     const [loading, setLoading] = useState(true);
     const printRef = useRef<HTMLDivElement>(null);
+    const searchParams = useSearchParams();
 
     useEffect(() => {
         setLoading(true);
-        const reportDataStr = sessionStorage.getItem('detailedReportData');
+        const reportDataStr = typeof window !== 'undefined' ? sessionStorage.getItem('detailedReportData') : null;
         if (reportDataStr) {
             const data = JSON.parse(reportDataStr);
             setProject(data.project);
@@ -72,7 +72,6 @@ const DetailedReportPage = () => {
         const partyMap = new Map(parties.map(p => [p.id, p.name]));
         const getPartyName = (partyId?: string) => partyId ? partyMap.get(partyId) || 'N/A' : 'N/A';
 
-        // Helper to filter transactions based on a list of IDs.
         const filterByIds = (ids: string[] = []) => allTransactions.filter(tx => ids.includes(tx.id));
 
         const salesTx = filterByIds(row.stockProfitProductIds || []);
@@ -124,7 +123,7 @@ const DetailedReportPage = () => {
 
 
     if (loading || !project || !row) {
-        return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin" /></div>;
+        return <div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
     return (
@@ -248,6 +247,12 @@ const DetailedReportPage = () => {
             </div>
         </div>
     );
-};
+}
 
-export default DetailedReportPage;
+export default function Page() {
+    return (
+        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+            <DetailedReportContent />
+        </Suspense>
+    )
+}

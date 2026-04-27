@@ -1,8 +1,6 @@
-
 'use client';
 
 import './globals.css';
-import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from "@/components/ui/toaster";
 import Header from '@/components/Header';
@@ -13,9 +11,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SecurityWrapper } from '@/components/layout/SecurityWrapper';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { applyTheme } from '@/lib/utils';
-import ShopSessionManager from '@/components/shop/ShopSessionManager';
+import { Loader2 } from 'lucide-react';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -76,7 +74,6 @@ export default function RootLayout({
       <body>
          <SecurityWrapper>
             <SidebarProvider defaultOpen={true}>
-                
                 {showHeaderAndSidebar && <AppSidebar />}
                 <SidebarInset className={cn(isPortalUser && "!ml-0")}>
                     {showHeaderAndSidebar && <Header />}
@@ -85,7 +82,11 @@ export default function RootLayout({
                         showBottomNav && "pb-24",
                         (isPortalUser || isPublicAuthPage || isNewsPage) && "p-0 md:p-0 lg:p-0"
                     )}>
-                        <main>{children}</main>
+                        <main>
+                          <Suspense fallback={<div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}>
+                            {children}
+                          </Suspense>
+                        </main>
                     </div>
                     {showBottomNav && <BottomNavBar />}
                 </SidebarInset>
