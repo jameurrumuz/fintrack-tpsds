@@ -36,3 +36,24 @@
 ---
 ### আপনার নতুন রুলস নিচে যোগ করুন:
 *(এখানে আপনি আপনার কাস্টম নিয়মগুলো লিখে দিতে পারেন)*
+
+
+### নতুন নিয়ম (সংযোজন: ২৬/৪/২০২৬, ৫:৫৮:৩০ PM)
+- পার্টি পেজের ট্রানজেকশনগুলো লেজারের উপরে পুরোনো তারিখের ট্রানজেকশনগুলো থাকবে ও নিচে নতুন ট্রানজেকশনগুলো থাকবে এটি পরিবর্তন হবে না।
+
+
+### নতুন নিয়ম (সংযোজন: ২৬/৪/২০২৬, ৬:০৬:৪৪ PM)
+- পার্টি পেজর যে কোন পরিবর্তন করলেও প্রিন্ট অপশন, শেয়ার অপশন, ট্রানজেকশন এর থ্রিডট অপশনের (Edit,Receipt/Invoice,Disable),ব্যাংক বা ক্যাশ ডিটেইস, বিজনেস প্রোফাইল নাম,ট্রানজেকশন টাইপ (সেল,ক্রেডিট সেল,ইনকাম ইত্যাদি), I Gave বাটন ( Select "Give" Type>Give (Paid)>Search SMS,Amount
+Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich,Credit Give (Due)>Search SMS,Amount
+Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich), Received বাটন ( Select "Receive" Type>Receive Payment>Search SMS,Amount
+Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich,Credit Income (Due)>Search SMS,Amount
+Date,Description,Profile (Via),Charge,Charge Via,Send SMS Swich, Advance Receive>Receive as,Payment,Credit Purchase,Cash Purchase,Other Income
+,Credit Income) এগুলো ঠিক থাকবে।
+
+
+### নতুন নিয়ম (সংযোজন: ২৬/৪/২০২৬, ৬:৩৩:৫৪ PM)
+- কোন ইরর সংশোধন বা করার সময় কোন পেজের কোড অসম্পূর্ন বা স্ট্রাকচার বা ডিজাইনের পরিবর্তন না করেই ইরর সংশোধন বা সমাধান করতে হবে।
+
+
+### নতুন নিয়ম (সংযোজন: ২৬/৪/২০২৬, ৬:৪৩:৫০ PM)
+- এসএমএস অপশন- যে কোন পেজ/পজ/পরিবর্তন বা সংশোধন করলেও এসএমএস সেন্ড অপশন, এসএমএস পাঠানো ও এর কোড যেন সেভ থাকে ও টেমপ্লেট অনুযায়ী যেন এসএমএস সেন্ড হয়। এই সার্ভিসটি সবসময় নিরবিচ্ছিন্ন রাখতে হবে। এসএমএস সেন্ড এর সুইচ অফ থাকলে কোনভাবেই সেই নাম্বারে বা ট্রানজেকশনের এসএমএস সেন্ড হবে না এটি যে কোন পরিবর্তন বা সংশোধন এর সময় নিশ্চিত করতে হবে।

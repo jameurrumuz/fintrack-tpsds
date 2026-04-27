@@ -116,15 +116,20 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   useEffect(() => {
     if (partyId) {
       setLoading(true);
-      getDoc(doc(db, 'parties', partyId)).then(snap => {
-        if (snap.exists()) {
-          const data = snap.data();
-          setParty({ id: snap.id, ...data } as Party);
-          transactionForm.setValue('via', data.group || 'Personal');
-          transactionForm.setValue('chargeVia', data.group || 'Personal');
-        }
-      });
-      getAppSettings().then(setAppSettings);
+      const fetchInitial = async () => {
+          const snap = await getDoc(doc(db, 'parties', partyId));
+          if (snap.exists()) {
+              const data = snap.data();
+              setParty({ id: snap.id, ...data } as Party);
+              transactionForm.setValue('via', data.group || 'Personal');
+              transactionForm.setValue('chargeVia', data.group || 'Personal');
+          }
+          const settings = await getAppSettings();
+          setAppSettings(settings);
+      };
+      
+      fetchInitial();
+      
       const unsubTx = subscribeToTransactionsForParty(partyId, (data) => setTransactions(data), (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
       const unsubAcc = subscribeToAccounts(setAccounts, console.error);
       
@@ -151,8 +156,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         if (hasTxsInLast7Days) {
           setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
         } else {
-          const latestDate = parseISO(enabledTxs[0].date);
           const latestDateStr = enabledTxs[0].date;
+          const latestDate = parseISO(latestDateStr);
           const sevenDaysBeforeLatest = formatFns(subDays(latestDate, 7), 'yyyy-MM-dd');
           setFilters(prev => ({ ...prev, dateFrom: sevenDaysBeforeLatest, dateTo: latestDateStr }));
         }
@@ -164,7 +169,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    const sortedAll = [...enabledTxs].sort((a, b) => {
+    // Sort Oldest to Newest for running balance calculation
+    const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
         if (dateA !== dateB) return dateA - dateB;
@@ -174,7 +180,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     });
     
     let running = 0;
-    const withRunning = sortedAll.map(t => {
+    const withRunning = sortedTimeline.map(t => {
         running += getPartyBalanceEffect(t);
         return { ...t, runningBalance: running };
     });
@@ -195,6 +201,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
+    // Final sorting for display: OLD dates at top, NEW dates at bottom as per RULES.md
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
@@ -754,7 +761,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                      </div>
                 </div>
                 <div className="text-right">
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter">PARTY STATEMENT</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter">PARTY STATEMENT</h2>
                     <p className="text-[10px] text-gray-400 mt-1 uppercase">Generated on: {formatFns(new Date(), 'dd/MM/yyyy hh:mm a')}</p>
                 </div>
             </div>
