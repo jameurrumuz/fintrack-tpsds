@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -147,20 +147,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   useEffect(() => {
     if (!loading && transactions.length > 0) {
-      const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => a.date.localeCompare(b.date));
-      if (enabledTxs.length > 0) {
-        const today = new Date();
-        const todayStr = formatFns(today, 'yyyy-MM-dd');
-        const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
-        setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
-        setIsDateFilterEnabled(true);
-      }
+      const today = new Date();
+      const todayStr = formatFns(today, 'yyyy-MM-dd');
+      const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
+      setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
+      setIsDateFilterEnabled(true);
     }
   }, [loading, transactions.length]);
 
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
+    // sorting oldest to newest as per RULES.md
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -201,6 +199,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
+    // Sort grouped array by date ascending as per RULES.md
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -386,6 +385,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
+                z-index: 9999;
+              }
+              body > *:not(#printable-statement-container) {
+                display: none !important;
               }
             }
         `}</style>
@@ -609,18 +612,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <div className="md:col-span-2 flex items-center gap-2">
                             <div className="flex-1 space-y-1">
                                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
-                                <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                                <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-sm" disabled={showAllTransactions}/>
                             </div>
                             <span className="mt-6 text-muted-foreground">-</span>
                             <div className="flex-1 space-y-1">
                                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
-                                <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                                <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-sm" disabled={showAllTransactions}/>
                             </div>
                         </div>
                         <div className="space-y-1">
                             <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
                             <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
-                                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
+                                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Profiles" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Profiles</SelectItem>
                                     {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
@@ -630,7 +633,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <div className="space-y-1">
                             <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
                             <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
-                                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Transactions</SelectItem>
                                     <SelectItem value="inc">INC (Credits)</SelectItem>

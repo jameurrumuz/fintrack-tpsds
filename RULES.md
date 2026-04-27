@@ -48,7 +48,7 @@ Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich,Credit G
 Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich), Received বাটন ( Select "Receive" Type>Receive Payment>Search SMS,Amount
 Date,Description,Account,Profile (Via),Charge,Charge Via,Send SMS Swich,Credit Income (Due)>Search SMS,Amount
 Date,Description,Profile (Via),Charge,Charge Via,Send SMS Swich, Advance Receive>Receive as,Payment,Credit Purchase,Cash Purchase,Other Income
-,Credit Income) এগুলো ঠিক থাকবে।
+,Credit Income) এগুলো ঠিক থাকবে (তবে ডিজাইন আপডেটের প্রয়োজনে এগুলোর স্থান পরিবর্তন হতে পারে)।
 
 
 ### নতুন নিয়ম (সংযোজন: ২৬/৪/২০২৬, ৬:৩৩:৫৪ PM)
