@@ -152,7 +152,16 @@ export async function toggleTransaction(id: string, enabled: boolean): Promise<v
 }
 
 export async function recalculateAccountBalance(accountId: string): Promise<void> {
-    if (!db) return;
+    if (!db || !accountId) return;
+    
+    const accountRef = doc(db, 'accounts', accountId);
+    const accountSnap = await getDoc(accountRef);
+    
+    if (!accountSnap.exists()) {
+        console.warn(`Account document with ID ${accountId} not found. Skipping balance update.`);
+        return;
+    }
+
     const txsSnap = await getDocs(query(collection(db, 'transactions'), where('involvedAccounts', 'array-contains', accountId)));
     
     let balance = 0;
@@ -171,11 +180,20 @@ export async function recalculateAccountBalance(accountId: string): Promise<void
         }
     });
 
-    await updateDoc(doc(db, 'accounts', accountId), { balance });
+    await updateDoc(accountRef, { balance });
 }
 
 export async function recalculatePartyBalance(partyId: string): Promise<void> {
-    if (!db) return;
+    if (!db || !partyId || partyId === 'walkin' || partyId === 'walkin-customer') return;
+
+    const partyRef = doc(db, 'parties', partyId);
+    const partySnap = await getDoc(partyRef);
+    
+    if (!partySnap.exists()) {
+        console.warn(`Party document with ID ${partyId} not found. Skipping balance update.`);
+        return;
+    }
+
     const txsSnap = await getDocs(query(collection(db, 'transactions'), where('partyId', '==', partyId)));
     
     let balance = 0;
@@ -184,7 +202,7 @@ export async function recalculatePartyBalance(partyId: string): Promise<void> {
         balance += getPartyBalanceEffect(tx, false);
     });
 
-    await updateDoc(doc(db, 'parties', partyId), { balance });
+    await updateDoc(partyRef, { balance });
 }
 
 export async function recalculateAllPartyBalances(): Promise<number> {

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
@@ -176,7 +175,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // RULES.md: Oldest date on top, newest at bottom (Ascending sort)
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -187,14 +185,21 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     });
     
     let running = 0;
-    let totalReceive = 0;
-    let totalGive = 0;
+    let totalReceive = 0; // Cr Total
+    let totalGive = 0;    // Dr Total
 
     const withRunning = sortedTimeline.map(t => {
         const effect = getPartyBalanceEffect(t);
         running += effect;
-        if (effect > 0) totalReceive += effect;
-        if (effect < 0) totalGive += Math.abs(effect);
+        
+        // Match the columns logic for totals in Analysis
+        if (['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type)) {
+            totalReceive += t.amount;
+        }
+        if (['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type)) {
+            totalGive += t.amount;
+        }
+
         return { ...t, runningBalance: running };
     });
 
@@ -215,7 +220,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Grouped array sorted oldest to newest (ascending)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -570,9 +574,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="flex justify-center border-b mb-4 no-print">
                 <TabsList className="bg-transparent h-12 gap-6 px-4">
-                    <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Transactions</TabsTrigger>
-                    <TabsTrigger value="analysis" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Analisis</TabsTrigger>
-                    <TabsTrigger value="loan" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Loan</TabsTrigger>
+                    <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-muted-foreground data-[state=active]:text-foreground">Transactions</TabsTrigger>
+                    <TabsTrigger value="analysis" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-muted-foreground data-[state=active]:text-foreground">Analysis</TabsTrigger>
+                    <TabsTrigger value="loan" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-muted-foreground data-[state=active]:text-foreground">Loan</TabsTrigger>
                 </TabsList>
             </div>
 
@@ -634,7 +638,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             {txs.map((t) => {
                               const effect = getPartyBalanceEffect(t);
                               
-                              // New column logic as per user instruction
                               const isDebit = ['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type);
                               const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type);
                               
@@ -684,8 +687,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         <CardContent className="space-y-4">
                             <div className="flex justify-between border-b pb-2"><span>Start Date</span><span className="font-bold">{stats?.startDate ? formatDate(stats.startDate) : 'N/A'}</span></div>
                             <div className="flex justify-between border-b pb-2"><span>Total Transactions</span><span className="font-bold">{stats?.totalCount || 0}</span></div>
-                            <div className="flex justify-between border-b pb-2"><span>Total Received</span><span className="font-bold text-green-600">{formatAmount(analysis.totalReceive)}</span></div>
-                            <div className="flex justify-between border-b pb-2"><span>Total Given</span><span className="font-bold text-red-600">{formatAmount(analysis.totalGive)}</span></div>
+                            <div className="flex justify-between border-b pb-2"><span>Total Received (Cr)</span><span className="font-bold text-green-600">{formatAmount(analysis.totalReceive)}</span></div>
+                            <div className="flex justify-between border-b pb-2"><span>Total Given (Dr)</span><span className="font-bold text-red-600">{formatAmount(analysis.totalGive)}</span></div>
                             <div className="flex justify-between pt-2"><span>Latest Transaction</span><span className="font-bold">{stats?.latestTx ? `${formatAmount(stats.latestTx.amount)} (${formatDate(stats.latestTx.date)})` : 'N/A'}</span></div>
                         </CardContent>
                     </Card>
