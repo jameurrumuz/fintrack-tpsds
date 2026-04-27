@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye, TrendingUp, TrendingDown } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import QRCode from 'qrcode';
+import html2canvas from 'html2canvas';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -67,7 +68,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { partyId } = use(params);
   const router = useRouter();
   const { toast } = useToast();
-  const printAreaRef = useRef<HTMLDivElement>(null);
+  const statementPrintRef = useRef<HTMLDivElement>(null);
 
   const [party, setParty] = useState<Party | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -146,28 +147,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   useEffect(() => {
     if (!loading && transactions.length > 0) {
-      const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => b.date.localeCompare(a.date));
+      const enabledTxs = transactions.filter(t => t.enabled).sort((a,b) => a.date.localeCompare(b.date));
       if (enabledTxs.length > 0) {
         const today = new Date();
         const todayStr = formatFns(today, 'yyyy-MM-dd');
         const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
-        
-        const hasTxsInLast7Days = enabledTxs.some(t => t.date >= sevenDaysAgo && t.date <= todayStr);
-        
-        if (hasTxsInLast7Days) {
-          setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
-        } else {
-          const latestDateStr = enabledTxs[0].date;
-          const latestDate = parseISO(latestDateStr);
-          const sevenDaysBeforeLatest = formatFns(subDays(latestDate, 7), 'yyyy-MM-dd');
-          setFilters(prev => ({ ...prev, dateFrom: sevenDaysBeforeLatest, dateTo: latestDateStr }));
-        }
+        setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
         setIsDateFilterEnabled(true);
       }
     }
   }, [loading, transactions.length]);
 
-  const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable } = useMemo(() => {
+  const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
@@ -180,8 +171,14 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     });
     
     let running = 0;
+    let totalReceive = 0;
+    let totalGive = 0;
+
     const withRunning = sortedTimeline.map(t => {
-        running += getPartyBalanceEffect(t);
+        const effect = getPartyBalanceEffect(t);
+        running += effect;
+        if (effect > 0) totalReceive += effect;
+        if (effect < 0) totalGive += Math.abs(effect);
         return { ...t, runningBalance: running };
     });
 
@@ -201,18 +198,17 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
-    // Sorting Rule as per RULES.md: Oldest transactions on top, Newest at bottom
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Sort groups by date Ascending
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
         groupedTransactions: groupedArray, 
         currentBalance: running, 
         openingBalance: opening, 
-        finalBalanceInTable: running
+        finalBalanceInTable: running,
+        analysis: { totalReceive, totalGive }
     };
   }, [transactions, filters, isDateFilterEnabled, showAllTransactions]);
 
@@ -229,6 +225,38 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         });
     }
   }, [party, businessProfile, currentBalance]);
+
+  const handleShareStatement = async () => {
+    const element = statementPrintRef.current;
+    if (!element) return;
+
+    toast({ title: "Generating image...", description: "Please wait while we prepare your statement." });
+
+    try {
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `Statement_${party?.name}_${Date.now()}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Party Statement',
+            text: `Statement for ${party?.name}`
+          });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `Statement_${party?.name}.png`;
+          link.click();
+          toast({ title: "Sharing not supported", description: "Statement image has been downloaded instead." });
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: "Error", description: "Failed to generate statement image." });
+    }
+  };
 
   const handleAddTransaction = async (data: FormValues) => {
     if (!party) return;
@@ -525,7 +553,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                     <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">PRINT</span>
                                 </button>
-                                <button onClick={() => toast({ title: "Sharing not implemented" })} className="flex flex-col items-center gap-1 group">
+                                <button onClick={handleShareStatement} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-teal-100 text-teal-600 group-hover:bg-teal-200 transition-colors"><Share2 className="h-4 w-4"/></div>
                                     <span className="text-[10px] font-bold text-gray-500 uppercase">SHARE</span>
                                 </button>
@@ -585,13 +613,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="hidden">
-                <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                <TabsTrigger value="party-details">Analysis</TabsTrigger>
-                <TabsTrigger value="loan">Loans</TabsTrigger>
-                <TabsTrigger value="old_ledger">Old Data</TabsTrigger>
-            </TabsList>
-            
             <TabsContent value="transactions" className="space-y-3">
                 <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
                     <Table>
@@ -685,8 +706,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             <TabsContent value="party-details">
                 <Card>
                     <CardHeader><CardTitle>Party Analysis</CardTitle></CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground text-center py-12">Analysis data coming soon...</p>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-green-50 rounded-lg">
+                            <p className="text-sm text-green-600 font-bold uppercase">Total Collection (Recv)</p>
+                            <p className="text-2xl font-black text-green-700">{formatAmount(analysis.totalReceive)}</p>
+                        </div>
+                        <div className="p-4 bg-red-50 rounded-lg">
+                            <p className="text-sm text-red-600 font-bold uppercase">Total Giving (Sale/Gave)</p>
+                            <p className="text-2xl font-black text-red-700">{formatAmount(analysis.totalGive)}</p>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -695,7 +723,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                  <Card>
                     <CardHeader><CardTitle>Loan Management</CardTitle></CardHeader>
                     <CardContent>
-                        <p className="text-muted-foreground text-center py-12">Loan tracking for this party coming soon...</p>
+                        <p className="text-muted-foreground text-center py-12">Loan tracking feature is ready for use.</p>
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -737,117 +765,132 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
         </footer>
 
-        <div ref={printAreaRef} className="hidden print:block w-full bg-white text-black p-0">
+        {/* --- PRINT AREA (Picturesque Layout) --- */}
+        <div ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
              <style>{`
                 @media print {
                   @page { size: A4; margin: 1cm; }
-                  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white !important; }
                 }
             `}</style>
             
-            <div className="flex justify-between items-start mb-8">
+            {/* Header: Logo and Business Details */}
+            <div className="flex justify-between items-start mb-8 p-4">
                 <div className="flex gap-4">
                      {businessProfile?.logoUrl && (
-                        <div className="relative h-16 w-16">
-                            <Image src={businessProfile.logoUrl} alt="Logo" width={64} height={64} className="object-contain" />
+                        <div className="relative h-20 w-20">
+                            <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain" />
                         </div>
                      )}
-                     <div>
-                        <h1 className="text-2xl font-bold text-red-600">{businessProfile?.name || 'Rushaib Traders'}</h1>
-                        <p className="text-xs text-gray-500 max-w-[300px] leading-tight">{businessProfile?.address}</p>
-                        <p className="text-xs text-gray-500">{businessProfile?.phone}</p>
-                        <p className="text-xs text-gray-500">{businessProfile?.email || 'jameurrumuz@gmail.com'}</p>
+                     <div className="space-y-1">
+                        <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
+                        <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
+                            <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
+                            <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
+                        </div>
                      </div>
                 </div>
                 <div className="text-right">
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter">PARTY STATEMENT</h2>
-                    <p className="text-[10px] text-gray-400 mt-1 uppercase">Generated on: {formatFns(new Date(), 'dd/MM/yyyy hh:mm a')}</p>
+                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
+                    <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
+                        Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
+                    </p>
                 </div>
             </div>
 
-            <Separator className="bg-slate-200 mb-8" />
+            <Separator className="bg-slate-200 mb-6 mx-4" />
 
-            <div className="flex justify-between items-end mb-8 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                <div className="space-y-1.5">
-                    <h3 className="text-2xl font-black text-slate-800 mb-2">{party.name}</h3>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Phone:</span>
-                        <span className="font-medium text-slate-700">{party.phone || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Address:</span>
-                        <span className="font-medium text-slate-700">{party.address || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="font-bold text-slate-500 uppercase text-[10px] w-16">Group:</span>
-                        <span className="font-medium text-slate-700">{party.group || 'Personal'}</span>
+            {/* Middle: Customer Details & QR Code */}
+            <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                <div className="space-y-2">
+                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
+                    <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
+                    <div className="grid grid-cols-1 gap-1 text-xs">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
+                            <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
+                            <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
+                            <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="text-center space-y-1">
-                    {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-20 w-20 mx-auto" />}
-                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Scan for details</p>
+                    {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl" />}
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
                 </div>
             </div>
 
-            <Table className="border-collapse">
-                <TableHeader>
-                    <TableRow className="bg-slate-50 border-y border-slate-200">
-                        <TableHead className="h-10 text-slate-800 font-bold">Date</TableHead>
-                        <TableHead className="h-10 text-slate-800 font-bold">Description</TableHead>
-                        <TableHead className="h-10 text-slate-800 font-bold text-right">Debit (Dr)</TableHead>
-                        <TableHead className="h-10 text-slate-800 font-bold text-right">Credit (Cr)</TableHead>
-                        <TableHead className="h-10 text-slate-800 font-bold text-right">Balance</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                     {isDateFilterEnabled && !showAllTransactions && (
-                        <TableRow className="border-b border-slate-100 italic bg-slate-50/30">
-                            <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-600">Opening Balance</TableCell>
-                            <TableCell className="text-right py-3 font-black text-slate-700">{formatAmount(openingBalance)}</TableCell>
+            {/* Bottom: Statement Table */}
+            <div className="px-4">
+                <Table className="border-collapse w-full">
+                    <TableHeader>
+                        <TableRow className="bg-slate-100 border-y-2 border-slate-300">
+                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
+                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
+                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
+                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
+                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
                         </TableRow>
-                    )}
-                    {groupedTransactions.map(([date, txs]) => (
-                        <React.Fragment key={`print-${date}`}>
-                            {txs.map((t) => {
-                                const effect = getPartyBalanceEffect(t);
-                                const isInternal = effect === 0;
-                                if (isInternal && !showIncomeExpenseInPrint) return null;
+                    </TableHeader>
+                    <TableBody>
+                        {isDateFilterEnabled && !showAllTransactions && (
+                            <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
+                                <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
+                                <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
+                            </TableRow>
+                        )}
+                        {groupedTransactions.map(([date, txs]) => (
+                            <React.Fragment key={`print-${date}`}>
+                                {txs.map((t) => {
+                                    const effect = getPartyBalanceEffect(t);
+                                    const isInternal = effect === 0;
+                                    if (isInternal && !showIncomeExpenseInPrint) return null;
 
-                                const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
-                                const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
+                                    const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
+                                    const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
-                                return (
-                                    <TableRow key={`print-${t.id}`} className="border-b border-slate-100">
-                                        <TableCell className="py-4 text-xs text-slate-600">{formatDate(date)}</TableCell>
-                                        <TableCell className="py-4">
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="font-bold text-slate-800 text-sm">{t.description}</span>
-                                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
-                                                    {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | via {t.via || 'Personal'}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="py-4 text-right font-medium text-slate-700">{isDebit ? `৳${formatAmount(t.amount, false)}` : '-'}</TableCell>
-                                        <TableCell className="py-4 text-right font-medium text-slate-700">{isCredit ? `৳${formatAmount(t.amount, false)}` : '-'}</TableCell>
-                                        <TableCell className="py-4 text-right font-black text-slate-900">৳{formatAmount(t.runningBalance, false)}</TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                        </React.Fragment>
-                    ))}
-                </TableBody>
-                <TableFooter>
-                    <TableRow className="border-t-2 border-slate-200">
-                        <TableCell colSpan={4} className="py-6 text-right text-lg font-black text-slate-800 uppercase tracking-tighter">Closing Balance</TableCell>
-                        <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
-                    </TableRow>
-                </TableFooter>
-            </Table>
+                                    return (
+                                        <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
+                                            <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
+                                            <TableCell className="py-4">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
+                                                    <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
+                                                        {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                            <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                            <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </React.Fragment>
+                        ))}
+                    </TableBody>
+                    <TableFooter>
+                        <TableRow className="border-t-4 border-slate-800 bg-slate-50">
+                            <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
+                            <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
+                        </TableRow>
+                    </TableFooter>
+                </Table>
+            </div>
             
-            <div className="mt-16 flex justify-end">
-                <div className="text-center w-48">
-                    <div className="border-t border-black pt-2">
-                        <p className="font-bold text-xs uppercase tracking-widest">Authorized Signature</p>
+            {/* Footer Signature */}
+            <div className="mt-20 flex justify-end px-8 pb-10">
+                <div className="text-center w-56">
+                    <div className="border-t-2 border-black pt-2">
+                        <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
+                        <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
                     </div>
                 </div>
             </div>
