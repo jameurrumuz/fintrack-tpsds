@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, Package } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, Package, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -37,6 +37,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Separator } from '@/components/ui/separator';
 import QRCode from 'qrcode';
 import html2canvas from 'html2canvas';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -93,6 +94,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [sendSms, setSendSms] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [isHeaderActionsExpanded, setIsHeaderActionsExpanded] = useState(false);
 
   const [payingInstallment, setPayingInstallment] = useState<{ loanId: string; installment: AmortizationEntry; index: number } | null>(null);
 
@@ -145,6 +147,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   }, [partyId, toast, transactionForm]);
 
   useEffect(() => {
+    if (isHeaderActionsExpanded) {
+        const timer = setTimeout(() => {
+            setIsHeaderActionsExpanded(false);
+        }, 5000);
+        return () => clearTimeout(timer);
+    }
+  }, [isHeaderActionsExpanded]);
+
+  useEffect(() => {
     if (!loading && transactions.length > 0) {
       const today = new Date();
       const todayStr = formatFns(today, 'yyyy-MM-dd');
@@ -157,7 +168,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // RULES.md: Oldest transactions at top, newest at bottom (Ascending Order)
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -192,7 +202,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Maintain ascending order in groups for the table display too as per rules
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -493,24 +502,37 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-1">{currentBalance >= 0 ? 'NET PAYABLE' : 'NET RECEIVABLE'}</p>
                             <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
                             
-                            <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                <button onClick={openExpenseForm} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-red-100 text-red-600 group-hover:bg-red-200 transition-colors"><MinusCircle className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">EXPENSE</span>
-                                </button>
-                                <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">POS</span>
-                                </Link>
-                                <button onClick={() => window.print()} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">PRINT</span>
-                                </button>
-                                <button onClick={handleShareStatement} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-teal-100 text-teal-600 group-hover:bg-teal-200 transition-colors"><Share2 className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">SHARE</span>
-                                </button>
-                            </div>
+                            <motion.div 
+                                initial={false}
+                                animate={{ height: isHeaderActionsExpanded ? 'auto' : 0, opacity: isHeaderActionsExpanded ? 1 : 0 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                    <button onClick={openExpenseForm} className="flex flex-col items-center gap-1 group">
+                                        <div className="p-2 rounded-full bg-red-100 text-red-600 group-hover:bg-red-200 transition-colors"><MinusCircle className="h-4 w-4"/></div>
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase">EXPENSE</span>
+                                    </button>
+                                    <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
+                                        <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase">POS</span>
+                                    </Link>
+                                    <button onClick={() => window.print()} className="flex flex-col items-center gap-1 group">
+                                        <div className="p-2 rounded-full bg-gray-100 text-gray-600 group-hover:bg-gray-200 transition-colors"><Printer className="h-4 w-4"/></div>
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase">PRINT</span>
+                                    </button>
+                                    <button onClick={handleShareStatement} className="flex flex-col items-center gap-1 group">
+                                        <div className="p-2 rounded-full bg-teal-100 text-teal-600 group-hover:bg-teal-200 transition-colors"><Share2 className="h-4 w-4"/></div>
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase">SHARE</span>
+                                    </button>
+                                </div>
+                            </motion.div>
+                            
+                            <button 
+                                onClick={() => setIsHeaderActionsExpanded(!isHeaderActionsExpanded)}
+                                className="mx-auto mt-2 flex h-6 w-12 items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 hover:bg-gray-300 transition-colors"
+                            >
+                                {isHeaderActionsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
                         </CardContent>
                     </Card>
                 </div>
