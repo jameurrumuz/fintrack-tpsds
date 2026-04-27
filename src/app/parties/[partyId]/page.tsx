@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
@@ -200,10 +201,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
-    // Sort by date ASC (Oldest first) as per RULES.md
+    // Sorting Rule as per RULES.md: Oldest transactions on top, Newest at bottom
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
+    // Sort groups by date Ascending
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
