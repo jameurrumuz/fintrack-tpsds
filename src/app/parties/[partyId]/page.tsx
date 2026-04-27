@@ -18,7 +18,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, 
+  MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, 
+  Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, 
+  Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, 
+  Package, ChevronDown, ChevronUp, Zap, Circle, CheckCircle, Repeat 
+} from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -170,7 +176,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // Sort oldest to newest for balance calculation
+    // RULES.md: Oldest date on top, newest at bottom (Ascending sort)
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -209,7 +215,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Final grouping sorted oldest to newest (ascending) for RULES.md
+    // Grouped array sorted oldest to newest (ascending)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -402,17 +408,29 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   const getAccountName = (accountId?: string) => accounts.find(a => a.id === accountId)?.name || '';
 
+  const getTxAccountDetails = (t: Transaction) => {
+    if (t.type === 'transfer') {
+        return `${getAccountName(t.fromAccountId)} → ${getAccountName(t.toAccountId)}`;
+    }
+    if (t.payments && t.payments.length > 0) {
+        return t.payments.map(p => getAccountName(p.accountId)).join(', ');
+    }
+    return getAccountName(t.accountId);
+  };
+
   if (loading || !party || !isHydrated) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <style>{`
             @media print {
-              body * { visibility: hidden !important; }
-              #printable-area-wrapper, #printable-area-wrapper * { 
-                visibility: visible !important; 
+              body * { 
+                visibility: hidden !important; 
                 font-weight: 400 !important;
                 color: black !important;
+              }
+              #printable-area-wrapper, #printable-area-wrapper * { 
+                visibility: visible !important; 
               }
               h1, h2, h3, .font-bold, .font-black { font-weight: 600 !important; }
               @page { size: A4; margin: 0.5in; }
@@ -420,6 +438,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
               table { border-collapse: collapse !important; width: 100% !important; }
               table th, table td { border: 1px solid #ddd !important; padding: 6px !important; }
               .no-print { display: none !important; }
+              .print-ink-save { font-weight: 400 !important; }
             }
         `}</style>
         
@@ -614,8 +633,12 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             </TableRow>
                             {txs.map((t) => {
                               const effect = getPartyBalanceEffect(t);
-                              const isCredit = effect > 0;
-                              const isDebit = effect < 0;
+                              
+                              // New column logic as per user instruction
+                              const isDebit = ['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type);
+                              const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type);
+                              
+                              const accountDetails = getTxAccountDetails(t);
 
                               return (
                                 <TableRow key={t.id} className="group hover:bg-muted/30">
@@ -625,13 +648,13 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                             <span className="text-xs font-semibold">{t.description}</span>
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 <Badge variant="outline" className="text-[8px] h-4 uppercase">{t.type.replace('_', ' ')}</Badge>
-                                                {t.accountId && <Badge variant="secondary" className="text-[8px] h-4">{getAccountName(t.accountId)}</Badge>}
+                                                {accountDetails && <Badge variant="secondary" className="text-[8px] h-4">{accountDetails}</Badge>}
                                                 {t.via && <Badge variant="outline" className="text-[8px] h-4 border-primary/20 text-primary">{t.via}</Badge>}
                                             </div>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount) : '-'}</TableCell>
-                                    <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount) : '-'}</TableCell>
+                                    <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                    <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
                                     <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
                                     <TableCell className="text-right no-print">
                                         <DropdownMenu>
@@ -819,9 +842,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                               {groupedTransactions.map(([date, txs]) => (
                                   <React.Fragment key={`print-${date}`}>
                                       {txs.map((t) => {
-                                          const effect = getPartyBalanceEffect(t);
-                                          const isCredit = effect > 0;
-                                          const isDebit = effect < 0;
+                                          const isDebit = ['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type);
+                                          const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type);
+                                          
                                           return (
                                               <TableRow key={`print-${t.id}`} className="border-b border-slate-100">
                                                   <TableCell className="py-4 text-[10px]">{formatDate(date)}</TableCell>
