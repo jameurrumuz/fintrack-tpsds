@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
@@ -51,7 +52,7 @@ const partyTransactionSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   amount: z.coerce.number().positive('Amount must be positive'),
   accountId: z.string().optional(),
-  type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale', 'credit_give', 'credit_income']),
+  type: z.enum(['receive', 'give', 'credit_sale', 'purchase', 'spent', 'income', 'credit_purchase', 'sale_return', 'purchase_return', 'credit_give', 'credit_income']),
   via: z.string().optional(),
   charge: z.coerce.number().optional(),
   chargeVia: z.string().optional(),
@@ -175,6 +176,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
+    // Sort oldest to newest for consistent running balance calculation (as per RULES.md)
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -217,6 +219,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
+    // Grouping by date but keeping older entries on top (RULES.md)
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     

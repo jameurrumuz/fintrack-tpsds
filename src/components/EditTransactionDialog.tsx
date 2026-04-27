@@ -12,9 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { transactionTypeOptions } from '@/lib/utils';
 import type { Party, Transaction, Account, AppSettings } from '@/types';
-import { format as formatFns } from 'date-fns';
+import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { DatePicker } from './ui/date-picker';
-import { parseISO } from 'date-fns';
 
 const editTransactionSchema = z.object({
   date: z.date(),
@@ -54,12 +53,21 @@ export default function EditTransactionDialog({ transaction, parties, accounts, 
 
   useEffect(() => {
     if (transaction) {
+      // Safety check for date string to prevent parseISO(undefined).split error
+      let safeDate = new Date();
+      if (transaction.date) {
+          const parsed = parseISO(transaction.date);
+          if (isValid(parsed)) {
+              safeDate = parsed;
+          }
+      }
+
       form.reset({
-        date: parseISO(transaction.date),
-        description: transaction.description,
-        amount: transaction.amount,
-        accountId: transaction.accountId,
-        type: transaction.type as any, // Cast to allow 'transfer' to be reset, even if not in schema
+        date: safeDate,
+        description: transaction.description || '',
+        amount: transaction.amount || 0,
+        accountId: transaction.accountId || '',
+        type: transaction.type as any,
         partyId: transaction.partyId || 'none',
         via: transaction.via || '',
       });
