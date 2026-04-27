@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye, BarChart2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye, BarChart2, MinusCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -370,6 +370,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       setIsGiveOptionsOpen(false);
       setIsFormOpen(true);
   }
+  
+  const openExpenseForm = () => {
+      setFormType('spent');
+      transactionForm.setValue('type', 'spent');
+      transactionForm.setValue('description', `Expense for ${party?.name}`);
+      const cashAcc = accounts.find(a => a.name.toLowerCase().includes('cash')) || accounts[0];
+      if (cashAcc) transactionForm.setValue('accountId', cashAcc.id);
+      setIsFormOpen(true);
+  }
 
   const getAccountName = (accountId?: string) => accounts.find(a => a.id === accountId)?.name || '';
 
@@ -493,7 +502,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Record {formType === 'give' ? 'Payment Given' : 'Payment Received'}</DialogTitle>
+                    <DialogTitle>Record {formType === 'give' ? 'Payment Given' : formType === 'spent' ? 'Expense' : 'Payment Received'}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={transactionForm.handleSubmit(handleAddTransaction)} className="space-y-4 py-2">
                     <div className="flex justify-end">
@@ -594,9 +603,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
                             
                             <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                <button onClick={() => setActiveTab('party-details')} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-orange-100 text-orange-600 group-hover:bg-orange-200 transition-colors"><BarChart2 className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">ANALYSIS</span>
+                                <button onClick={openExpenseForm} className="flex flex-col items-center gap-1 group">
+                                    <div className="p-2 rounded-full bg-red-100 text-red-600 group-hover:bg-red-200 transition-colors"><MinusCircle className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">EXPENSE</span>
                                 </button>
                                 <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
