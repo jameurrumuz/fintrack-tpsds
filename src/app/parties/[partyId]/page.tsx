@@ -18,9 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, FileUp, Check, Phone, Mail, Eye, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -164,7 +163,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // RULES.md: Oldest transactions at top, newest at bottom
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -205,7 +203,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Sort grouped array by date ascending for print (Oldest to Newest)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -238,7 +235,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     toast({ title: "Generating image...", description: "Please wait while we prepare your statement." });
 
     try {
-      // Ensure element is visible before capture
       element.style.display = 'block';
       await new Promise(resolve => setTimeout(resolve, 500));
       
@@ -249,7 +245,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         logging: false,
       });
 
-      // Hide it back if not printing
       if (!window.matchMedia('print').matches) {
           element.style.display = 'none';
       }
@@ -385,7 +380,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         <style>{`
             @media print {
               body * { visibility: hidden !important; }
-              #printable-area-wrapper, #printable-area-wrapper * { visibility: visible !important; }
+              #printable-area-wrapper, #printable-area-wrapper * { 
+                visibility: visible !important; 
+                font-weight: 400 !important;
+                color: black !important;
+              }
+              h1, h2, h3, .font-bold, .font-black {
+                font-weight: 600 !important;
+              }
+              @page {
+                size: A4;
+                margin: 0.5in;
+              }
               #printable-area-wrapper { 
                 position: absolute !important; 
                 left: 0 !important; 
@@ -400,7 +406,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 background: white !important;
               }
               .no-print { display: none !important; }
-              .print-image { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+              .print-image { 
+                print-color-adjust: exact; 
+                -webkit-print-color-adjust: exact; 
+              }
+              table {
+                border-collapse: collapse !important;
+                width: 100% !important;
+              }
+              table th, table td {
+                border: 1px solid #ddd !important;
+                padding: 6px !important;
+              }
             }
         `}</style>
         
@@ -577,17 +594,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
                             
                             <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                <button onClick={() => setActiveTab('loan')} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors"><Landmark className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">LOAN</span>
-                                </button>
-                                <button onClick={() => setActiveTab('old_ledger')} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-blue-100 text-blue-600 group-hover:bg-blue-200 transition-colors"><History className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">OLD</span>
-                                </button>
                                 <button onClick={() => setActiveTab('party-details')} className="flex flex-col items-center gap-1 group">
-                                    <div className="p-2 rounded-full bg-orange-100 text-orange-600 group-hover:bg-orange-200 transition-colors"><FileText className="h-4 w-4"/></div>
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase">EXP</span>
+                                    <div className="p-2 rounded-full bg-orange-100 text-orange-600 group-hover:bg-orange-200 transition-colors"><BarChart2 className="h-4 w-4"/></div>
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">ANALYSIS</span>
                                 </button>
                                 <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1 group">
                                     <div className="p-2 rounded-full bg-green-100 text-green-600 group-hover:bg-green-200 transition-colors"><ShoppingCart className="h-4 w-4"/></div>
@@ -613,9 +622,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             <div className="flex justify-center border-b mb-4 no-print">
                 <TabsList className="bg-transparent h-12 gap-6 px-4">
                     <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Transactions</TabsTrigger>
-                    <TabsTrigger value="loan" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Loan</TabsTrigger>
-                    <TabsTrigger value="party-details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Analysis</TabsTrigger>
-                    <TabsTrigger value="old_ledger" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Old Ledger</TabsTrigger>
+                    <TabsTrigger value="party-details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Expense Analysis</TabsTrigger>
                 </TabsList>
             </div>
 
@@ -758,7 +765,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
             <TabsContent value="party-details" className="m-0">
                 <Card>
-                    <CardHeader><CardTitle>Party Analysis</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>Expense Analysis</CardTitle></CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="p-4 bg-green-50 rounded-lg">
                             <p className="text-sm text-green-600 font-bold uppercase">Total Collection (Recv)</p>
@@ -768,29 +775,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className="text-sm text-red-600 font-bold uppercase">Total Giving (Sale/Gave)</p>
                             <p className="text-2xl font-black text-red-700">{formatAmount(analysis.totalGive)}</p>
                         </div>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-
-            <TabsContent value="loan" className="m-0">
-                 <Card>
-                    <CardHeader><CardTitle>Loan Management</CardTitle></CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground text-center py-12">Loan tracking feature is ready for use.</p>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-
-            <TabsContent value="old_ledger" className="m-0">
-                 <Card>
-                    <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle>Old Ledger Data</CardTitle>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href={`/old-data?partyId=${partyId}`}><FileUp className="mr-2 h-4 w-4"/> Import PDF</Link>
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground text-center py-12">Imported historical data will be listed here.</p>
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -827,21 +811,21 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       <div className="flex gap-4">
                           {businessProfile?.logoUrl && (
                               <div className="relative h-20 w-20">
-                                  <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain print-image" />
+                                  <img src={businessProfile.logoUrl} alt="Logo" width="80" height="80" className="object-contain print-image" />
                               </div>
                           )}
                           <div className="space-y-1">
-                              <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
-                              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
-                              <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
+                              <h1 className="text-3xl font-bold text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
+                              <p className="text-[10px] text-gray-500 font-normal uppercase tracking-tighter">{businessProfile?.address}</p>
+                              <div className="flex items-center gap-4 text-[10px] font-normal text-gray-600">
                                   <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
                                   <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
                               </div>
                           </div>
                       </div>
                       <div className="text-right">
-                          <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
-                          <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
+                          <h2 className="text-3xl font-bold text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
+                          <p className="text-[9px] text-gray-400 mt-2 font-normal uppercase tracking-widest">
                               Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
                           </p>
                       </div>
@@ -852,26 +836,26 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                   {/* Middle: Customer Details & QR Code */}
                   <div className="flex justify-between items-end mb-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
                       <div className="space-y-2">
-                          <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
-                          <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
+                          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">Statement For</p>
+                          <h3 className="text-2xl font-bold text-slate-800 leading-tight">{party.name}</h3>
                           <div className="grid grid-cols-1 gap-1 text-xs">
                               <div className="flex items-center gap-2">
-                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
-                                  <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
+                                  <span className="font-normal text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
+                                  <span className="font-bold text-slate-700">{party.phone || 'N/A'}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
-                                  <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
+                                  <span className="font-normal text-slate-400 uppercase text-[9px] w-14">Address:</span>
+                                  <span className="font-normal text-slate-600">{party.address || 'N/A'}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
+                                  <span className="font-normal text-slate-400 uppercase text-[9px] w-14">Group:</span>
                                   <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
                               </div>
                           </div>
                       </div>
                       <div className="text-center space-y-1">
                           {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl print-image" />}
-                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
                       </div>
                   </div>
 
@@ -880,18 +864,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       <Table className="border-collapse w-full">
                           <TableHeader>
                               <TableRow className="bg-slate-100 border-y-2 border-slate-300">
-                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
-                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
-                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
-                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
-                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-bold uppercase text-[10px]">Date</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-bold uppercase text-[10px]">Description</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-bold uppercase text-[10px] text-right">Debit (Dr)</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-bold uppercase text-[10px] text-right">Credit (Cr)</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-bold uppercase text-[10px] text-right">Balance</TableHead>
                               </TableRow>
                           </TableHeader>
                           <TableBody>
                               {isDateFilterEnabled && !showAllTransactions && (
                                   <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
                                       <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
-                                      <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
+                                      <TableCell className="text-right py-3 font-bold text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
                                   </TableRow>
                               )}
                               {groupedTransactions.map(([date, txs]) => (
@@ -906,18 +890,18 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
                                           return (
                                               <TableRow key={`print-${t.id}`} className="border-b border-slate-100">
-                                                  <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
+                                                  <TableCell className="py-4 text-[10px] font-normal text-slate-600">{formatDate(date)}</TableCell>
                                                   <TableCell className="py-4">
                                                       <div className="flex flex-col gap-0.5">
-                                                          <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
-                                                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
+                                                          <span className="font-bold text-slate-800 text-xs leading-tight">{t.description}</span>
+                                                          <span className="text-[8px] text-slate-400 font-normal uppercase tracking-tighter">
                                                               {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
                                                           </span>
                                                       </div>
                                                   </TableCell>
-                                                  <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                                  <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                                  <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
+                                                  <TableCell className="py-4 text-right font-normal text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                  <TableCell className="py-4 text-right font-normal text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                  <TableCell className="py-4 text-right font-bold text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
                                               </TableRow>
                                           );
                                       })}
@@ -926,8 +910,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                           </TableBody>
                           <TableFooter>
                               <TableRow className="border-t-4 border-slate-800 bg-slate-50">
-                                  <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
-                                  <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
+                                  <TableCell colSpan={4} className="py-6 text-right text-base font-bold text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
+                                  <TableCell className="py-6 text-right text-xl font-bold text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
                               </TableRow>
                           </TableFooter>
                       </Table>
@@ -937,8 +921,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                   <div className="mt-20 flex justify-end px-8 pb-10">
                       <div className="text-center w-56">
                           <div className="border-t-2 border-black pt-2">
-                              <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
-                              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
+                              <p className="font-bold text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
+                              <p className="text-[8px] text-slate-400 font-normal uppercase mt-1">Verified Document</p>
                           </div>
                       </div>
                   </div>
