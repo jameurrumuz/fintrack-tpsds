@@ -38,6 +38,8 @@ import { Separator } from '@/components/ui/separator';
 import QRCode from 'qrcode';
 import html2canvas from 'html2canvas';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -80,7 +82,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     dateTo: '', 
     via: 'all'
   });
-  const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
+  const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(true);
+  const [includeInternalTx, setIncludeInternalTx] = useState(true);
   const [activeTab, setActiveTab] = useState("transactions");
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -161,13 +164,13 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       const todayStr = formatFns(today, 'yyyy-MM-dd');
       const sevenDaysAgo = formatFns(subDays(today, 7), 'yyyy-MM-dd');
       setFilters(prev => ({ ...prev, dateFrom: sevenDaysAgo, dateTo: todayStr }));
-      setIsDateFilterEnabled(true);
     }
   }, [loading, transactions.length]);
 
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
+    // Sort oldest to newest for balance calculation
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -194,6 +197,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         .pop()?.runningBalance || 0 : 0;
 
     let filtered = withRunning.filter(t => {
+        if (!includeInternalTx) {
+            const effect = getPartyBalanceEffect(t);
+            if (effect === 0) return false;
+        }
         if (filters.via !== 'all' && t.via !== filters.via) return false;
         if (!isDateFilterEnabled) return true;
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
@@ -202,6 +209,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
+    // Final grouping sorted oldest to newest (ascending) for RULES.md
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -211,7 +219,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         finalBalanceInTable: running,
         analysis: { totalReceive, totalGive }
     };
-  }, [transactions, filters, isDateFilterEnabled]);
+  }, [transactions, filters, isDateFilterEnabled, includeInternalTx]);
 
   const stats = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
@@ -544,32 +552,38 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             <div className="flex justify-center border-b mb-4 no-print">
                 <TabsList className="bg-transparent h-12 gap-6 px-4">
                     <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Transactions</TabsTrigger>
-                    <TabsTrigger value="analysis" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Analysis</TabsTrigger>
+                    <TabsTrigger value="analysis" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Analisis</TabsTrigger>
                     <TabsTrigger value="loan" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs text-foreground">Loan</TabsTrigger>
                 </TabsList>
             </div>
 
             <TabsContent value="transactions" className="space-y-3 m-0">
-                <div className="flex flex-col gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                        <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
-                            <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-sm" />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
-                            <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-sm" />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Profile</Label>
-                            <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
-                                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Profiles" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Profiles</SelectItem>
-                                    {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                <div className="flex flex-wrap items-end gap-4 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
+                        <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-sm w-[140px]" />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
+                        <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-sm w-[140px]" />
+                    </div>
+                    <div className="space-y-1 min-w-[140px]">
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Profile</Label>
+                        <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Profiles" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Profiles</SelectItem>
+                                {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex items-center space-x-2 pb-2">
+                        <Switch id="all-tx-switch" checked={!isDateFilterEnabled} onCheckedChange={(checked) => setIsDateFilterEnabled(!checked)} />
+                        <Label htmlFor="all-tx-switch" className="text-[10px] font-bold uppercase text-muted-foreground cursor-pointer">All Transaction</Label>
+                    </div>
+                    <div className="flex items-center space-x-2 pb-2">
+                        <Checkbox id="inc-exp-check" checked={includeInternalTx} onCheckedChange={(checked) => setIncludeInternalTx(!!checked)} />
+                        <Label htmlFor="inc-exp-check" className="text-[10px] font-bold uppercase text-muted-foreground cursor-pointer">INC/EXP</Label>
                     </div>
                 </div>
 
