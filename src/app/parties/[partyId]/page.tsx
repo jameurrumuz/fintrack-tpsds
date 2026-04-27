@@ -161,6 +161,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
+    // Sort transactions Oldest to Newest as per RULES.md
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -201,6 +202,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
+    // Grouped array sorted by date (Oldest to Newest)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -233,7 +235,21 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     toast({ title: "Generating image...", description: "Please wait while we prepare your statement." });
 
     try {
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      // Small delay to ensure all dynamic elements (like QR) are ready
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        logging: false,
+        onclone: (document) => {
+            // Ensure the element is visible during cloning for capture
+            const el = document.getElementById('printable-statement-container');
+            if (el) el.style.display = 'block';
+        }
+      });
+
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         const file = new File([blob], `Statement_${party?.name}_${Date.now()}.png`, { type: 'image/png' });
@@ -241,7 +257,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           await navigator.share({
             files: [file],
             title: 'Party Statement',
-            text: `Statement for ${party?.name}`
+            text: `Statement for ${party?.name} from ${businessProfile?.name}`
           });
         } else {
           const url = URL.createObjectURL(blob);
@@ -251,7 +267,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           link.click();
           toast({ title: "Sharing not supported", description: "Statement image has been downloaded instead." });
         }
-      });
+      }, 'image/png');
     } catch (e) {
       console.error(e);
       toast({ variant: 'destructive', title: "Error", description: "Failed to generate statement image." });
@@ -289,7 +305,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         setIsFormOpen(false);
         transactionForm.reset();
     } catch (error: any) {
-        toast({ variant: 'destructive', title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
         setIsSaving(false);
     }
@@ -565,55 +581,64 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         </header>
 
         <main className="container mx-auto p-3 flex-1 overflow-auto">
-            <div className="flex flex-col gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                    <div className="md:col-span-2 flex items-center gap-2">
-                        <div className="flex-1 space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
-                            <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
-                        </div>
-                        <span className="mt-6 text-muted-foreground">-</span>
-                        <div className="flex-1 space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
-                            <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
-                        <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
-                            <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Profiles</SelectItem>
-                                {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
-                        <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
-                            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Transactions</SelectItem>
-                                <SelectItem value="inc">INC (Credits)</SelectItem>
-                                <SelectItem value="exp">EXP (Debits)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 border-t pt-2">
-                    <div className="flex items-center gap-2">
-                        <Switch id="all-tx-switch" checked={showAllTransactions} onCheckedChange={setShowAllTransactions} />
-                        <Label htmlFor="all-tx-switch" className="text-xs font-bold uppercase cursor-pointer">All Transactions</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Checkbox id="print-inc-exp" checked={showIncomeExpenseInPrint} onCheckedChange={c => setShowIncomeExpenseInPrint(!!c)} />
-                        <Label htmlFor="print-inc-exp" className="text-xs font-bold uppercase cursor-pointer">Income/Expense In Print</Label>
-                    </div>
-                </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex justify-center border-b mb-4 no-print">
+                <TabsList className="bg-transparent h-12 gap-6 px-4">
+                    <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Transactions</TabsTrigger>
+                    <TabsTrigger value="loan" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Loan</TabsTrigger>
+                    <TabsTrigger value="party-details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Analysis</TabsTrigger>
+                    <TabsTrigger value="old_ledger" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold uppercase text-xs">Old Ledger</TabsTrigger>
+                </TabsList>
             </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsContent value="transactions" className="space-y-3">
+            <TabsContent value="transactions" className="space-y-3 m-0">
+                <div className="flex flex-col gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                        <div className="md:col-span-2 flex items-center gap-2">
+                            <div className="flex-1 space-y-1">
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Start Date</Label>
+                                <Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                            </div>
+                            <span className="mt-6 text-muted-foreground">-</span>
+                            <div className="flex-1 space-y-1">
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground">End Date</Label>
+                                <Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" disabled={showAllTransactions}/>
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Business Profile</Label>
+                            <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
+                                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All Profiles" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Profiles</SelectItem>
+                                    {appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nature</Label>
+                            <Select value={filters.nature} onValueChange={v => setFilters({...filters, nature: v as any})}>
+                                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Transactions</SelectItem>
+                                    <SelectItem value="inc">INC (Credits)</SelectItem>
+                                    <SelectItem value="exp">EXP (Debits)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t pt-2">
+                        <div className="flex items-center gap-2">
+                            <Switch id="all-tx-switch" checked={showAllTransactions} onCheckedChange={setShowAllTransactions} />
+                            <Label htmlFor="all-tx-switch" className="text-xs font-bold uppercase cursor-pointer">All Transactions</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox id="print-inc-exp" checked={showIncomeExpenseInPrint} onCheckedChange={c => setShowIncomeExpenseInPrint(!!c)} />
+                            <Label htmlFor="print-inc-exp" className="text-xs font-bold uppercase cursor-pointer">Income/Expense In Print</Label>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -703,7 +728,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </div>
             </TabsContent>
 
-            <TabsContent value="party-details">
+            <TabsContent value="party-details" className="m-0">
                 <Card>
                     <CardHeader><CardTitle>Party Analysis</CardTitle></CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -719,7 +744,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </Card>
             </TabsContent>
 
-            <TabsContent value="loan">
+            <TabsContent value="loan" className="m-0">
                  <Card>
                     <CardHeader><CardTitle>Loan Management</CardTitle></CardHeader>
                     <CardContent>
@@ -728,7 +753,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 </Card>
             </TabsContent>
 
-            <TabsContent value="old_ledger">
+            <TabsContent value="old_ledger" className="m-0">
                  <Card>
                     <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>Old Ledger Data</CardTitle>
@@ -766,131 +791,134 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         </footer>
 
         {/* --- PRINT AREA (Picturesque Layout) --- */}
-        <div ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
+        <div id="printable-statement-container" ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
              <style>{`
                 @media print {
                   @page { size: A4; margin: 1cm; }
                   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white !important; }
+                  .print-area { position: relative !important; display: block !important; margin: 0 !important; padding: 0 !important; width: 100% !important; height: auto !important; overflow: visible !important; }
                 }
             `}</style>
             
-            {/* Header: Logo and Business Details */}
-            <div className="flex justify-between items-start mb-8 p-4">
-                <div className="flex gap-4">
-                     {businessProfile?.logoUrl && (
-                        <div className="relative h-20 w-20">
-                            <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain" />
-                        </div>
-                     )}
-                     <div className="space-y-1">
-                        <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
-                        <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
-                            <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
-                            <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
-                        </div>
-                     </div>
-                </div>
-                <div className="text-right">
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
-                    <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
-                        Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
-                    </p>
-                </div>
-            </div>
-
-            <Separator className="bg-slate-200 mb-6 mx-4" />
-
-            {/* Middle: Customer Details & QR Code */}
-            <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                <div className="space-y-2">
-                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
-                    <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
-                    <div className="grid grid-cols-1 gap-1 text-xs">
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
-                            <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
-                            <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
-                            <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
+            <div className="print-area">
+                {/* Header: Logo and Business Details */}
+                <div className="flex justify-between items-start mb-8 p-4">
+                    <div className="flex gap-4">
+                        {businessProfile?.logoUrl && (
+                            <div className="relative h-20 w-20">
+                                <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain" />
+                            </div>
+                        )}
+                        <div className="space-y-1">
+                            <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
+                            <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
+                                <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
+                                <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
+                            </div>
                         </div>
                     </div>
+                    <div className="text-right">
+                        <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
+                        <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
+                            Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
+                        </p>
+                    </div>
                 </div>
-                <div className="text-center space-y-1">
-                    {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl" />}
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
-                </div>
-            </div>
 
-            {/* Bottom: Statement Table */}
-            <div className="px-4">
-                <Table className="border-collapse w-full">
-                    <TableHeader>
-                        <TableRow className="bg-slate-100 border-y-2 border-slate-300">
-                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
-                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
-                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
-                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
-                            <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isDateFilterEnabled && !showAllTransactions && (
-                            <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
-                                <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
-                                <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
+                <Separator className="bg-slate-200 mb-6 mx-4" />
+
+                {/* Middle: Customer Details & QR Code */}
+                <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                    <div className="space-y-2">
+                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
+                        <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
+                        <div className="grid grid-cols-1 gap-1 text-xs">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
+                                <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
+                                <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
+                                <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="text-center space-y-1">
+                        {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl" />}
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
+                    </div>
+                </div>
+
+                {/* Bottom: Statement Table */}
+                <div className="px-4">
+                    <Table className="border-collapse w-full">
+                        <TableHeader>
+                            <TableRow className="bg-slate-100 border-y-2 border-slate-300">
+                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
+                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
+                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
+                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
+                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
                             </TableRow>
-                        )}
-                        {groupedTransactions.map(([date, txs]) => (
-                            <React.Fragment key={`print-${date}`}>
-                                {txs.map((t) => {
-                                    const effect = getPartyBalanceEffect(t);
-                                    const isInternal = effect === 0;
-                                    if (isInternal && !showIncomeExpenseInPrint) return null;
+                        </TableHeader>
+                        <TableBody>
+                            {isDateFilterEnabled && !showAllTransactions && (
+                                <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
+                                    <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
+                                    <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
+                                </TableRow>
+                            )}
+                            {groupedTransactions.map(([date, txs]) => (
+                                <React.Fragment key={`print-${date}`}>
+                                    {txs.map((t) => {
+                                        const effect = getPartyBalanceEffect(t);
+                                        const isInternal = effect === 0;
+                                        if (isInternal && !showIncomeExpenseInPrint) return null;
 
-                                    const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
-                                    const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
+                                        const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
+                                        const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
-                                    return (
-                                        <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
-                                            <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
-                                            <TableCell className="py-4">
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
-                                                    <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
-                                                        {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                            <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                            <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </React.Fragment>
-                        ))}
-                    </TableBody>
-                    <TableFooter>
-                        <TableRow className="border-t-4 border-slate-800 bg-slate-50">
-                            <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
-                            <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
-                        </TableRow>
-                    </TableFooter>
-                </Table>
-            </div>
-            
-            {/* Footer Signature */}
-            <div className="mt-20 flex justify-end px-8 pb-10">
-                <div className="text-center w-56">
-                    <div className="border-t-2 border-black pt-2">
-                        <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
-                        <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
+                                        return (
+                                            <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
+                                                <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
+                                                <TableCell className="py-4">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
+                                                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
+                                                            {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </React.Fragment>
+                            ))}
+                        </TableBody>
+                        <TableFooter>
+                            <TableRow className="border-t-4 border-slate-800 bg-slate-50">
+                                <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
+                                <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    </Table>
+                </div>
+                
+                {/* Footer Signature */}
+                <div className="mt-20 flex justify-end px-8 pb-10">
+                    <div className="text-center w-56">
+                        <div className="border-t-2 border-black pt-2">
+                            <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
+                            <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
+                        </div>
                     </div>
                 </div>
             </div>
