@@ -375,20 +375,24 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <style>{`
             @media print {
-              body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-              .no-print, header, main, footer, .sidebar, [data-sidebar="trigger"] { display: none !important; }
+              body { background: white !important; }
+              .no-print, header, footer, .sidebar, [data-sidebar="trigger"], .tabs-list { display: none !important; }
+              
+              /* Ensure only the wrapper and its inner print container are shown */
+              body > * { display: none !important; }
+              #printable-area-wrapper, #printable-area-wrapper * { display: block !important; visibility: visible !important; }
+              #printable-area-wrapper { position: absolute; left: 0; top: 0; width: 100%; z-index: 9999; }
+              
               #printable-statement-container {
                 display: block !important;
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
+                position: relative !important;
                 width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                z-index: 9999;
+                background: white !important;
+                color: black !important;
               }
-              body > *:not(#printable-statement-container) {
-                display: none !important;
+              .print-image {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
               }
             }
         `}</style>
@@ -480,7 +484,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         </div>
                         <div className="space-y-1">
                             <Label>Date</Label>
-                            <Controller control={transactionForm.control} name="date" render={({ field }) => (<DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />)} />
+                            <Controller control={transactionForm.control} name="date" render={({ field }) => (
+                                <DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />
+                            )} />
                         </div>
                     </div>
                     <div className="space-y-1">
@@ -806,129 +812,131 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         </footer>
 
         {/* --- PRINT AREA (Picturesque Layout) --- */}
-        <div id="printable-statement-container" ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
-            <div className="p-1 min-h-screen">
-                {/* Header: Logo and Business Details */}
-                <div className="flex justify-between items-start mb-8 p-4">
-                    <div className="flex gap-4">
-                        {businessProfile?.logoUrl && (
-                            <div className="relative h-20 w-20">
-                                <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain" />
-                            </div>
-                        )}
-                        <div className="space-y-1">
-                            <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
-                            <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
-                                <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
-                                <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
-                        <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
-                            Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
-                        </p>
-                    </div>
-                </div>
+        <div id="printable-area-wrapper">
+          <div id="printable-statement-container" ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
+              <div className="p-1 min-h-screen">
+                  {/* Header: Logo and Business Details */}
+                  <div className="flex justify-between items-start mb-8 p-4">
+                      <div className="flex gap-4">
+                          {businessProfile?.logoUrl && (
+                              <div className="relative h-20 w-20">
+                                  <Image src={businessProfile.logoUrl} alt="Logo" width={80} height={80} className="object-contain print-image" />
+                              </div>
+                          )}
+                          <div className="space-y-1">
+                              <h1 className="text-3xl font-black text-red-600 leading-none">{businessProfile?.name || 'Rushaib Traders'}</h1>
+                              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{businessProfile?.address}</p>
+                              <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600">
+                                  <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5"/> {businessProfile?.phone}</span>
+                                  <span className="flex items-center gap-1"><Mail className="h-2.5 w-2.5"/> {businessProfile?.email || 'jameurrumuz@gmail.com'}</span>
+                              </div>
+                          </div>
+                      </div>
+                      <div className="text-right">
+                          <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">PARTY STATEMENT</h2>
+                          <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">
+                              Printed on: {formatFns(new Date(), 'dd/MM/yyyy | hh:mm a')}
+                          </p>
+                      </div>
+                  </div>
 
-                <Separator className="bg-slate-200 mb-6 mx-4" />
+                  <Separator className="bg-slate-200 mb-6 mx-4" />
 
-                {/* Middle: Customer Details & QR Code */}
-                <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                    <div className="space-y-2">
-                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
-                        <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
-                        <div className="grid grid-cols-1 gap-1 text-xs">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
-                                <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
-                                <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
-                                <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="text-center space-y-1">
-                        {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl" />}
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
-                    </div>
-                </div>
+                  {/* Middle: Customer Details & QR Code */}
+                  <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                      <div className="space-y-2">
+                          <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
+                          <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
+                          <div className="grid grid-cols-1 gap-1 text-xs">
+                              <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Mobile:</span>
+                                  <span className="font-black text-slate-700">{party.phone || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Address:</span>
+                                  <span className="font-medium text-slate-600">{party.address || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-400 uppercase text-[9px] w-14">Group:</span>
+                                  <span className="font-bold text-slate-700 px-2 py-0.5 bg-white border rounded-full">{party.group || 'Personal'}</span>
+                              </div>
+                          </div>
+                      </div>
+                      <div className="text-center space-y-1">
+                          {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="QR Code" className="h-24 w-24 mx-auto border-4 border-white shadow-sm rounded-xl print-image" />}
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Scan QR to Verify</p>
+                      </div>
+                  </div>
 
-                {/* Bottom: Statement Table */}
-                <div className="px-4">
-                    <Table className="border-collapse w-full">
-                        <TableHeader>
-                            <TableRow className="bg-slate-100 border-y-2 border-slate-300">
-                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
-                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
-                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
-                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
-                                <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {isDateFilterEnabled && !showAllTransactions && (
-                                <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
-                                    <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
-                                    <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
-                                </TableRow>
-                            )}
-                            {groupedTransactions.map(([date, txs]) => (
-                                <React.Fragment key={`print-${date}`}>
-                                    {txs.map((t) => {
-                                        const effect = getPartyBalanceEffect(t);
-                                        const isInternal = effect === 0;
-                                        if (isInternal && !showIncomeExpenseInPrint) return null;
+                  {/* Bottom: Statement Table */}
+                  <div className="px-4">
+                      <Table className="border-collapse w-full">
+                          <TableHeader>
+                              <TableRow className="bg-slate-100 border-y-2 border-slate-300">
+                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Date</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px]">Description</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Debit (Dr)</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Credit (Cr)</TableHead>
+                                  <TableHead className="h-10 text-slate-800 font-black uppercase text-[10px] text-right">Balance</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {isDateFilterEnabled && !showAllTransactions && (
+                                  <TableRow className="border-b border-slate-100 italic bg-slate-50/50">
+                                      <TableCell colSpan={4} className="text-right py-3 font-bold text-slate-500 text-xs">Opening Balance (B/F)</TableCell>
+                                      <TableCell className="text-right py-3 font-black text-slate-700 text-xs">{formatAmount(openingBalance)}</TableCell>
+                                  </TableRow>
+                              )}
+                              {groupedTransactions.map(([date, txs]) => (
+                                  <React.Fragment key={`print-${date}`}>
+                                      {txs.map((t) => {
+                                          const effect = getPartyBalanceEffect(t);
+                                          const isInternal = effect === 0;
+                                          if (isInternal && !showIncomeExpenseInPrint) return null;
 
-                                        const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
-                                        const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
+                                          const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'income', 'sale', 'purchase_return'].includes(t.type) || effect > 0;
+                                          const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
-                                        return (
-                                            <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
-                                                <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
-                                                <TableCell className="py-4">
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
-                                                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
-                                                            {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                                <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
-                                                <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </React.Fragment>
-                            ))}
-                        </TableBody>
-                        <TableFooter>
-                            <TableRow className="border-t-4 border-slate-800 bg-slate-50">
-                                <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
-                                <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
-                            </TableRow>
-                        </TableFooter>
-                    </Table>
-                </div>
-                
-                {/* Footer Signature */}
-                <div className="mt-20 flex justify-end px-8 pb-10">
-                    <div className="text-center w-56">
-                        <div className="border-t-2 border-black pt-2">
-                            <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
-                            <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                                          return (
+                                              <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
+                                                  <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
+                                                  <TableCell className="py-4">
+                                                      <div className="flex flex-col gap-0.5">
+                                                          <span className="font-black text-slate-800 text-xs leading-tight">{t.description}</span>
+                                                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">
+                                                              {t.type.replace('_', ' ')} | {getAccountName(t.accountId)} | VIA {t.via || 'PERSONAL'}
+                                                          </span>
+                                                      </div>
+                                                  </TableCell>
+                                                  <TableCell className="py-4 text-right font-bold text-red-600 text-xs">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                  <TableCell className="py-4 text-right font-bold text-green-600 text-xs">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
+                                                  <TableCell className="py-4 text-right font-black text-slate-900 text-xs">{formatAmount(t.runningBalance, false)}</TableCell>
+                                              </TableRow>
+                                          );
+                                      })}
+                                  </React.Fragment>
+                              ))}
+                          </TableBody>
+                          <TableFooter>
+                              <TableRow className="border-t-4 border-slate-800 bg-slate-50">
+                                  <TableCell colSpan={4} className="py-6 text-right text-base font-black text-slate-800 uppercase tracking-tighter">Net Closing Balance</TableCell>
+                                  <TableCell className="py-6 text-right text-xl font-black text-red-600">৳{formatAmount(finalBalanceInTable, false)}</TableCell>
+                              </TableRow>
+                          </TableFooter>
+                      </Table>
+                  </div>
+                  
+                  {/* Footer Signature */}
+                  <div className="mt-20 flex justify-end px-8 pb-10">
+                      <div className="text-center w-56">
+                          <div className="border-t-2 border-black pt-2">
+                              <p className="font-black text-[10px] uppercase tracking-widest text-slate-800">Authorized Signature</p>
+                              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Verified Document</p>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
         </div>
     </div>
   );
