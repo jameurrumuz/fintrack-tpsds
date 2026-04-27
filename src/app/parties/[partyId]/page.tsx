@@ -161,7 +161,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // Sort transactions Oldest to Newest as per RULES.md
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -202,7 +201,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Grouped array sorted by date (Oldest to Newest)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -235,7 +233,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     toast({ title: "Generating image...", description: "Please wait while we prepare your statement." });
 
     try {
-      // Small delay to ensure all dynamic elements (like QR) are ready
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const canvas = await html2canvas(element, { 
@@ -244,7 +241,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         backgroundColor: '#ffffff',
         logging: false,
         onclone: (document) => {
-            // Ensure the element is visible during cloning for capture
             const el = document.getElementById('printable-statement-container');
             if (el) el.style.display = 'block';
         }
@@ -378,6 +374,22 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
+        <style>{`
+            @media print {
+              body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+              .no-print, header, main, footer, .sidebar, [data-sidebar="trigger"] { display: none !important; }
+              #printable-statement-container {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+            }
+        `}</style>
+        
         <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={handleUpdateTransaction} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         <PaymentReceiptDialog isOpen={!!viewingReceipt} onOpenChange={(open) => !open && setViewingReceipt(null)} transaction={viewingReceipt} party={party} appSettings={appSettings} accounts={accounts} allTransactions={transactions} />
         <InvoiceDialog isOpen={!!viewingInvoice} onOpenChange={(open) => !open && setViewingInvoice(null)} invoice={viewingInvoice} party={party} parties={[party]} appSettings={appSettings} onPrint={() => window.print()} accounts={accounts} allTransactions={transactions} />
@@ -792,15 +804,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
         {/* --- PRINT AREA (Picturesque Layout) --- */}
         <div id="printable-statement-container" ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
-             <style>{`
-                @media print {
-                  @page { size: A4; margin: 1cm; }
-                  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white !important; }
-                  .print-area { position: relative !important; display: block !important; margin: 0 !important; padding: 0 !important; width: 100% !important; height: auto !important; overflow: visible !important; }
-                }
-            `}</style>
-            
-            <div className="print-area">
+            <div className="p-1 min-h-screen">
                 {/* Header: Logo and Business Details */}
                 <div className="flex justify-between items-start mb-8 p-4">
                     <div className="flex gap-4">
