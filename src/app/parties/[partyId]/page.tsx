@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
-import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, Package } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -34,7 +34,6 @@ import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog'
 import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
 import InvoiceDialog from '@/components/pos/InvoiceDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import QRCode from 'qrcode';
 import html2canvas from 'html2canvas';
@@ -94,6 +93,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [sendSms, setSendSms] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+
+  const [payingInstallment, setPayingInstallment] = useState<{ loanId: string; installment: AmortizationEntry; index: number } | null>(null);
 
   const transactionForm = useForm<FormValues>({
     resolver: zodResolver(partyTransactionSchema),
@@ -156,7 +157,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // RULES.md: Oldest transactions at top, newest at bottom
+    // RULES.md: Oldest transactions at top, newest at bottom (Ascending Order)
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -191,7 +192,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Maintain ascending order in groups
+    // Maintain ascending order in groups for the table display too as per rules
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -215,8 +216,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const latestTx = [...enabledTxs].sort((a,b) => {
         const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateDiff !== 0) return dateDiff;
-        const timeA = (a.createdAt as any)?.seconds || new Date(a.createdAt || 0).getTime();
-        const timeB = (b.createdAt as any)?.seconds || new Date(b.createdAt || 0).getTime();
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     })[0];
 
@@ -241,7 +242,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
     const productStats = Array.from(productSalesMap.entries()).map(([id, data]) => ({
         id,
-        name: data.quantity > 0 ? (enabledTxs.find(tx => tx.items?.some(i => i.id === id))?.items?.find(i => i.id === id)?.name || 'Unknown') : 'Unknown',
+        name: (enabledTxs.find(tx => tx.items?.some(i => i.id === id))?.items?.find(i => i.id === id)?.name || 'Unknown'),
         quantity: data.quantity,
         avgPrice: data.quantity > 0 ? data.totalValue / data.quantity : 0,
         returns: productReturnsMap.get(id) || 0
@@ -346,12 +347,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     }
   };
 
-  const openReceiveForm = (type: 'receive' | 'credit_income' | 'advance') => {
-      if (type === 'advance') {
-          setIsReceiveOptionsOpen(false);
-          router.push(`/transactions/receive?partyId=${party?.id}&partyName=${encodeURIComponent(party?.name || '')}`);
-          return;
-      }
+  const openReceiveForm = (type: 'receive' | 'credit_income') => {
       setFormType('receive');
       transactionForm.setValue('type', type);
       transactionForm.setValue('description', `Received from ${party?.name}`);
@@ -375,6 +371,17 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       if (cashAcc) transactionForm.setValue('accountId', cashAcc.id);
       setIsFormOpen(true);
   }
+
+  const handleMarkEmiAsPaid = async (loanId: string, index: number, paymentDetails: any) => {
+    if (!party) return;
+    try {
+        await markEmiAsPaid(party.id, loanId, index, paymentDetails);
+        setPayingInstallment(null);
+        toast({ title: 'Success', description: 'EMI payment recorded.' });
+    } catch (e: any) {
+        toast({ variant: 'destructive', title: 'Error', description: e.message });
+    }
+  };
 
   const getAccountName = (accountId?: string) => accounts.find(a => a.id === accountId)?.name || '';
 
@@ -624,7 +631,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><PackagePlus/> Product & Returns</CardTitle></CardHeader>
+                        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Package/> Product & Returns</CardTitle></CardHeader>
                         <CardContent>
                             <Table>
                                 <TableHeader>
@@ -803,6 +810,36 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
               </div>
           </div>
         </div>
+        
+        {payingInstallment && (
+            <Dialog open={!!payingInstallment} onOpenChange={(o) => !o && setPayingInstallment(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Pay Installment #{payingInstallment.installment.installment}</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><Label>Amount</Label><Input value={formatAmount(payingInstallment.installment.payment)} readOnly className="bg-muted"/></div>
+                             <div><Label>Account</Label>
+                                <Select onValueChange={(v) => setPayingInstallment(p => p ? ({...p, accountId: v}) : null)}>
+                                    <SelectTrigger><SelectValue placeholder="Select Account"/></SelectTrigger>
+                                    <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                             </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setPayingInstallment(null)}>Cancel</Button>
+                        <Button onClick={() => handleMarkEmiAsPaid(payingInstallment.loanId, payingInstallment.index, { 
+                            paymentDate: new Date().toISOString().split('T')[0],
+                            accountId: (payingInstallment as any).accountId,
+                            principal: payingInstallment.installment.principal,
+                            interest: payingInstallment.installment.interest,
+                            installment: payingInstallment.installment.installment,
+                            loanNumber: party.loans?.find(l => l.id === payingInstallment.loanId)?.loanNumber
+                        })}>Confirm Payment</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
     </div>
   );
 }
