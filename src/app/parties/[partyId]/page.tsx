@@ -75,6 +75,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
+  
   const [filters, setFilters] = useState({ 
     dateFrom: '', 
     dateTo: '', 
@@ -114,6 +116,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       chargeVia: '',
     },
   });
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (partyId) {
@@ -158,7 +164,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, finalBalanceInTable, analysis } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // sorting oldest to newest as per RULES.md
+    // RULES.md: Oldest transactions at top, newest at bottom
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -199,7 +205,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
     
-    // Sort grouped array by date ascending as per RULES.md
+    // Sort grouped array by date ascending for print (Oldest to Newest)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     return { 
@@ -216,14 +222,14 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   }, [appSettings, party]);
 
   useEffect(() => {
-    if (party && businessProfile) {
+    if (party && businessProfile && isHydrated) {
         const qrText = `Party: ${party.name}\nBalance: ${formatAmount(currentBalance)}\nFrom: ${businessProfile.name}`;
         QRCode.toDataURL(qrText, { width: 100, margin: 1, errorCorrectionLevel: 'H' }, (err, url) => {
             if (err) return;
             setQrCodeDataUrl(url);
         });
     }
-  }, [party, businessProfile, currentBalance]);
+  }, [party, businessProfile, currentBalance, isHydrated]);
 
   const handleShareStatement = async () => {
     const element = statementPrintRef.current;
@@ -232,18 +238,21 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     toast({ title: "Generating image...", description: "Please wait while we prepare your statement." });
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Ensure element is visible before capture
+      element.style.display = 'block';
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const canvas = await html2canvas(element, { 
         scale: 2, 
         useCORS: true, 
         backgroundColor: '#ffffff',
         logging: false,
-        onclone: (document) => {
-            const el = document.getElementById('printable-statement-container');
-            if (el) el.style.display = 'block';
-        }
       });
+
+      // Hide it back if not printing
+      if (!window.matchMedia('print').matches) {
+          element.style.display = 'none';
+      }
 
       canvas.toBlob(async (blob) => {
         if (!blob) return;
@@ -369,31 +378,29 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   const getAccountName = (accountId?: string) => accounts.find(a => a.id === accountId)?.name || '';
 
-  if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
+  if (loading || !party || !isHydrated) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen pb-24">
         <style>{`
             @media print {
-              body { background: white !important; }
-              .no-print, header, footer, .sidebar, [data-sidebar="trigger"], .tabs-list { display: none !important; }
-              
-              /* Ensure only the wrapper and its inner print container are shown */
-              body > * { display: none !important; }
-              #printable-area-wrapper, #printable-area-wrapper * { display: block !important; visibility: visible !important; }
-              #printable-area-wrapper { position: absolute; left: 0; top: 0; width: 100%; z-index: 9999; }
-              
+              body * { visibility: hidden !important; }
+              #printable-area-wrapper, #printable-area-wrapper * { visibility: visible !important; }
+              #printable-area-wrapper { 
+                position: absolute !important; 
+                left: 0 !important; 
+                top: 0 !important; 
+                width: 100% !important; 
+                z-index: 9999 !important;
+                display: block !important;
+              }
               #printable-statement-container {
                 display: block !important;
-                position: relative !important;
                 width: 100% !important;
                 background: white !important;
-                color: black !important;
               }
-              .print-image {
-                print-color-adjust: exact;
-                -webkit-print-color-adjust: exact;
-              }
+              .no-print { display: none !important; }
+              .print-image { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             }
         `}</style>
         
@@ -811,12 +818,12 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
         </footer>
 
-        {/* --- PRINT AREA (Picturesque Layout) --- */}
-        <div id="printable-area-wrapper">
-          <div id="printable-statement-container" ref={statementPrintRef} className="hidden print:block w-full bg-white text-black p-0">
-              <div className="p-1 min-h-screen">
+        {/* --- PRINT AREA --- */}
+        <div id="printable-area-wrapper" className="hidden print:block">
+          <div id="printable-statement-container" ref={statementPrintRef} className="w-full bg-white text-black p-0">
+              <div className="p-4 min-h-screen">
                   {/* Header: Logo and Business Details */}
-                  <div className="flex justify-between items-start mb-8 p-4">
+                  <div className="flex justify-between items-start mb-8">
                       <div className="flex gap-4">
                           {businessProfile?.logoUrl && (
                               <div className="relative h-20 w-20">
@@ -840,10 +847,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                       </div>
                   </div>
 
-                  <Separator className="bg-slate-200 mb-6 mx-4" />
+                  <Separator className="bg-slate-200 mb-6" />
 
                   {/* Middle: Customer Details & QR Code */}
-                  <div className="flex justify-between items-end mb-6 mx-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                  <div className="flex justify-between items-end mb-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
                       <div className="space-y-2">
                           <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Statement For</p>
                           <h3 className="text-2xl font-black text-slate-800 leading-tight">{party.name}</h3>
@@ -869,7 +876,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                   </div>
 
                   {/* Bottom: Statement Table */}
-                  <div className="px-4">
+                  <div className="w-full">
                       <Table className="border-collapse w-full">
                           <TableHeader>
                               <TableRow className="bg-slate-100 border-y-2 border-slate-300">
@@ -898,7 +905,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                           const isDebit = ['give', 'credit_sale', 'purchase', 'spent', 'credit_give', 'purchase_return'].includes(t.type) || effect < 0;
 
                                           return (
-                                              <TableRow key={`print-${t.id}`} className="border-b border-slate-100 hover:bg-slate-50/30">
+                                              <TableRow key={`print-${t.id}`} className="border-b border-slate-100">
                                                   <TableCell className="py-4 text-[10px] font-bold text-slate-600">{formatDate(date)}</TableCell>
                                                   <TableCell className="py-4">
                                                       <div className="flex flex-col gap-0.5">
