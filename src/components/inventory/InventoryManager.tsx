@@ -33,7 +33,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, AlertTriangle, SlidersHorizontal, Loader2, X, Grid, List, Boxes, DollarSign, ShoppingCart, Settings, FileText, History, Download } from 'lucide-react';
+import { 
+  Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, 
+  ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, 
+  AlertTriangle, SlidersHorizontal, Loader2, X, Grid, List, Boxes, 
+  DollarSign, ShoppingCart, Settings, FileText, History, Download, Save 
+} from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
