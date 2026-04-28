@@ -155,7 +155,11 @@ const MultiPartySelect = ({ parties, selected, onChange }: { parties: Party[], s
                         <CommandEmpty>No party found.</CommandEmpty>
                         <CommandGroup>
                             {parties.map((party) => (
-                                <CommandItem key={party.id} value={party.name} onSelect={() => handleSelect(party.id)}>
+                                <CommandItem
+                                    key={party.id}
+                                    value={party.name}
+                                    onSelect={() => handleSelect(party.id)}
+                                >
                                     <Check className={cn("mr-2 h-4 w-4", selected.includes(party.id) ? "opacity-100" : "opacity-0")} />
                                     {party.name}
                                 </CommandItem>
@@ -172,6 +176,9 @@ const MultiPartySelect = ({ parties, selected, onChange }: { parties: Party[], s
 function StockInOutReportContent() {
   const searchParams = useSearchParams();
   const productNameFromQuery = searchParams.get('productName') || '';
+  const partyIdsFromQuery = searchParams.get('partyIds') || '';
+  const dateFromFromQuery = searchParams.get('dateFrom') || '';
+  const dateToFromQuery = searchParams.get('dateTo') || '';
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
@@ -195,7 +202,16 @@ function StockInOutReportContent() {
             setFilters(f => ({ ...f, productIds: [item.id] }));
         }
     }
-}, [productNameFromQuery, inventoryItems, filters.productIds]);
+    
+    if ((partyIdsFromQuery || dateFromFromQuery || dateToFromQuery) && !loading) {
+        setFilters(f => ({
+            ...f,
+            partyIds: partyIdsFromQuery ? partyIdsFromQuery.split(',') : f.partyIds,
+            dateFrom: dateFromFromQuery || f.dateFrom,
+            dateTo: dateToFromQuery || f.dateTo,
+        }));
+    }
+}, [productNameFromQuery, partyIdsFromQuery, dateFromFromQuery, dateToFromQuery, inventoryItems, loading]);
 
 
   useEffect(() => {
@@ -299,7 +315,7 @@ function StockInOutReportContent() {
             <div className="space-y-1"><Label>To</Label><Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} /></div>
             <div className="space-y-1"><Label>Business Profile</Label>
                 <Select value={filters.via} onValueChange={v => setFilters({...filters, via: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select via..." /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">All</SelectItem>
                         {appSettings?.businessProfiles.map(o => <SelectItem key={o.name} value={o.name}>{o.name}</SelectItem>)}

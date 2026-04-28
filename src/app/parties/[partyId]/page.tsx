@@ -206,7 +206,13 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         currentBalance: running, 
         openingBalance: opening, 
         analysis: { totalReceive, totalGive },
-        stats: { startDate: sortedTimeline[0]?.date, totalCount: enabledTxs.length, latestTx: sortedTimeline[sortedTimeline.length - 1], productStats }
+        stats: { 
+            startDate: sortedTimeline[0]?.date, 
+            endDate: sortedTimeline[sortedTimeline.length - 1]?.date,
+            totalCount: enabledTxs.length, 
+            latestTx: sortedTimeline[sortedTimeline.length - 1], 
+            productStats 
+        }
     };
   }, [transactions, filters, isDateFilterEnabled, includeInternalTx]);
 
@@ -269,6 +275,22 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
       setIsFormOpen(true);
   }
 
+  const goToStockInOut = () => {
+    if (!party) return;
+    const params = new URLSearchParams();
+    params.set('partyIds', party.id);
+    
+    if (isDateFilterEnabled && filters.dateFrom && filters.dateTo) {
+        params.set('dateFrom', filters.dateFrom);
+        params.set('dateTo', filters.dateTo);
+    } else {
+        if (stats.startDate) params.set('dateFrom', stats.startDate);
+        if (stats.endDate) params.set('dateTo', stats.endDate);
+    }
+    
+    router.push(`/reports/stock-in-out?${params.toString()}`);
+  }
+
   if (loading || !party) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
 
   return (
@@ -315,11 +337,12 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </div>
 
             <TabsContent value="transactions" className="space-y-3 m-0">
-                <div className="flex flex-wrap items-end gap-2 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
+                <div className="flex flex-wrap items-center gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
                     <div className="flex-1 min-w-[120px] space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">Start</Label><Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" /></div>
                     <div className="flex-1 min-w-[120px] space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">End</Label><Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" /></div>
-                    <div className="flex items-center space-x-2 pb-2"><Switch checked={!isDateFilterEnabled} onCheckedChange={v => setIsDateFilterEnabled(!v)} /><Label className="text-[10px] font-bold uppercase text-muted-foreground">All Tx</Label></div>
-                    <div className="flex items-center space-x-2 pb-2"><Checkbox id="inc-exp" checked={includeInternalTx} onCheckedChange={v => setIncludeInternalTx(!!v)} /><Label htmlFor="inc-exp" className="text-[10px] font-bold uppercase text-muted-foreground">INC/EXP</Label></div>
+                    <div className="flex items-center space-x-2"><Switch checked={!isDateFilterEnabled} onCheckedChange={v => setIsDateFilterEnabled(!v)} /><Label className="text-[10px] font-bold uppercase text-muted-foreground">All Tx</Label></div>
+                    <div className="flex items-center space-x-2"><Checkbox id="inc-exp" checked={includeInternalTx} onCheckedChange={v => setIncludeInternalTx(!!v)} /><Label htmlFor="inc-exp" className="text-[10px] font-bold uppercase text-muted-foreground">INC/EXP</Label></div>
+                    <Button variant="outline" size="sm" className="h-9 gap-1 text-[10px] font-bold uppercase" onClick={goToStockInOut}><Repeat className="h-3.5 w-3.5"/> Go to in/out</Button>
                 </div>
 
                 <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
@@ -380,16 +403,26 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     <Button type="button" variant="outline" className="w-full justify-start gap-2" onClick={handleFetchSms} disabled={smsLoading}>{smsLoading ? <Loader2 className="animate-spin h-4 w-4"/> : <Search className="h-4 w-4"/>} Search SMS</Button>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1"><Label>Amount</Label><Input type="number" step="0.01" {...transactionForm.register('amount')} autoFocus /></div>
-                        <div className="space-y-1"><Label>Date</Label><Controller control={transactionForm.control} name="date" render={({ field }) => (<DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />)} /></div>
+                        <div className="space-y-1"><Label>Date</Label><Controller control={transactionForm.control} name="date" render={({ field }) => ( <DatePicker value={field.value} onChange={(d) => field.onChange(d as Date)} />)} /></div>
                     </div>
                     <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} /></div>
                     <div className="grid grid-cols-2 gap-4">
                         {!['credit_give', 'credit_income'].includes(transactionForm.watch('type')) && (<div className="space-y-1"><Label>Account</Label><Controller name="accountId" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent></Select>)} /></div>)}
-                        <div className="space-y-1"><Label>Profile (Via)</Label><Controller name="via" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent></Select>)} /></div>
+                        <div className="space-y-1"><Label>Profile (Via)</Label><Controller name="via" control={transactionForm.control} render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        )} /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 border-t pt-4">
                         <div className="space-y-1"><Label>Charge</Label><Input type="number" {...transactionForm.register('charge')} /></div>
-                        <div className="space-y-1"><Label>Charge Via</Label><Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent></Select>)} /></div>
+                        <div className="space-y-1"><Label>Charge Via</Label><Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        )} /></div>
                     </div>
                     <div className="flex items-center justify-center gap-2 pt-2"><Switch checked={sendSms} onCheckedChange={setSendSms}/><Label>Send SMS</Label></div>
                     <DialogFooter><Button type="submit" disabled={isSaving} className="w-full">{isSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} Save Transaction</Button></DialogFooter>
