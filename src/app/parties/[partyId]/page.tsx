@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
@@ -104,7 +105,7 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
                                         setOpen(false);
                                     }}
                                 >
-                                    <Check className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
+                                    <CheckIcon className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span className="font-medium">{party.name}</span>
                                         <span className="text-xs text-muted-foreground">{party.phone}</span>
@@ -293,9 +294,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     setIsSaving(true);
     try {
         const dateStr = formatFns(data.date, 'yyyy-MM-dd');
-        await addTransaction({ ...data, date: dateStr, partyId: party.id, enabled: true, via: data.via || 'Personal', sendSms });
+        await addTxService({ ...data, date: dateStr, partyId: party.id, enabled: true, via: data.via || 'Personal', sendSms });
         if (data.charge && data.charge > 0) {
-            await addTransaction({ date: dateStr, description: `Charge for: ${data.description}`, amount: data.charge, type: 'spent', accountId: data.accountId, via: data.chargeVia || data.via || 'Personal', enabled: true });
+            await addTxService({ date: dateStr, description: `Charge for: ${data.description}`, amount: data.charge, type: 'spent', accountId: data.accountId, via: data.chargeVia || data.via || 'Personal', enabled: true });
         }
         toast({ title: "Success", description: "Transaction recorded." });
         setIsFormOpen(false);
@@ -529,7 +530,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             <DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Select Transaction from SMS</DialogTitle></DialogHeader><div className="max-h-[60vh] overflow-y-auto space-y-2">{smsData.map((sms, i) => (<div key={i} className="p-3 border rounded-md hover:bg-muted cursor-pointer transition-colors" onClick={() => selectSms(sms)}><div className="flex justify-between text-[10px] text-muted-foreground mb-1"><span>{sms.name}</span><span>{sms.date}</span></div><p className="text-xs leading-tight">{sms.message}</p></div>))}{smsData.length === 0 && <p className="text-center py-10 opacity-50">No SMS found in sheet.</p>}</div></DialogContent>
         </Dialog>
         
-        <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={async (data) => { await updateTransaction(editingTransaction!.id, data); setEditingTransaction(null); }} parties={[party]} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
+        <PartyTransactionEditDialog transaction={editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)} onSave={async (data) => { await updateTransaction(editingTransaction!.id, data); setEditingTransaction(null); }} parties={parties} accounts={accounts} inventoryItems={[]} appSettings={appSettings} />
         <PaymentReceiptDialog isOpen={!!viewingReceipt} onOpenChange={(open) => !open && setViewingReceipt(null)} transaction={viewingReceipt} party={party} appSettings={appSettings} accounts={accounts} allTransactions={transactions} />
         <InvoiceDialog isOpen={!!viewingInvoice} onOpenChange={(open) => !open && setViewingInvoice(null)} invoice={viewingInvoice} party={party} parties={[party]} appSettings={appSettings} onPrint={() => window.print()} accounts={accounts} allTransactions={transactions} />
     </div>

@@ -1,19 +1,22 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { transactionTypeOptions } from '@/lib/utils';
+import { transactionTypeOptions, cn } from '@/lib/utils';
 import type { Party, Transaction, Account, AppSettings } from '@/types';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { DatePicker } from './ui/date-picker';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
+import { Check, ChevronsUpDown } from 'lucide-react';
 
 const editTransactionSchema = z.object({
   date: z.date(),
@@ -44,6 +47,64 @@ interface EditTransactionDialogProps {
   onSave: (data: Omit<Transaction, 'id' | 'enabled'>) => void;
 }
 
+const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party..." }: { parties: Party[], value: string, onChange: (value: string) => void, placeholder?: string }) => {
+    const [open, setOpen] = useState(false);
+    const selectedParty = parties.find(p => p.id === value);
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between font-normal h-10"
+                >
+                    {value && selectedParty ? selectedParty.name : placeholder}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                    <CommandInput placeholder="Search party..." />
+                    <CommandList>
+                        <CommandEmpty>Not found.</CommandEmpty>
+                        <CommandGroup>
+                            <CommandItem
+                                key="none-party"
+                                value="none"
+                                onSelect={() => {
+                                    onChange("none");
+                                    setOpen(false);
+                                }}
+                            >
+                                <Check className={cn("mr-2 h-4 w-4", value === "none" ? "opacity-100" : "opacity-0")} />
+                                None
+                            </CommandItem>
+                            {parties.map((party) => (
+                                <CommandItem
+                                    key={party.id}
+                                    value={`${party.name} ${party.phone}`}
+                                    onSelect={() => {
+                                        onChange(party.id);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", value === party.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{party.name}</span>
+                                        <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 export default function EditTransactionDialog({ transaction, parties, accounts, appSettings, onOpenChange, onSave }: EditTransactionDialogProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(editTransactionSchema),
@@ -53,7 +114,6 @@ export default function EditTransactionDialog({ transaction, parties, accounts, 
 
   useEffect(() => {
     if (transaction) {
-      // Safety check for date string to prevent parseISO(undefined).split error
       let safeDate = new Date();
       if (transaction.date) {
           const parsed = parseISO(transaction.date);
@@ -166,15 +226,9 @@ export default function EditTransactionDialog({ transaction, parties, accounts, 
             </div>
              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
-                    <Label htmlFor="partyId">Party</Label>
+                    <Label htmlFor="partyId">Party (Customer/Supplier)</Label>
                      <Controller name="partyId" control={form.control} render={({ field }) => (
-                         <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger><SelectValue placeholder="Select a party..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                {parties.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                         <PartyCombobox parties={parties} value={field.value || ''} onChange={field.onChange} />
                     )} />
                 </div>
                  <div className="space-y-1">
@@ -191,7 +245,7 @@ export default function EditTransactionDialog({ transaction, parties, accounts, 
                 </div>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit">Save Changes</Button>
             </DialogFooter>
           </form>

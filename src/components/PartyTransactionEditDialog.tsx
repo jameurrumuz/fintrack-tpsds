@@ -126,6 +126,64 @@ const ItemCombobox = ({ items, onSelect, className }: { items: InventoryItem[], 
     );
 };
 
+const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party..." }: { parties: Party[], value: string, onChange: (value: string) => void, placeholder?: string }) => {
+    const [open, setOpen] = useState(false);
+    const selectedParty = parties.find(p => p.id === value);
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between font-normal h-10"
+                >
+                    {value && selectedParty ? selectedParty.name : placeholder}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                    <CommandInput placeholder="Search party..." />
+                    <CommandList>
+                        <CommandEmpty>Not found.</CommandEmpty>
+                        <CommandGroup>
+                            <CommandItem
+                                key="none-party"
+                                value="none"
+                                onSelect={() => {
+                                    onChange("none");
+                                    setOpen(false);
+                                }}
+                            >
+                                <Check className={cn("mr-2 h-4 w-4", value === "none" ? "opacity-100" : "opacity-0")} />
+                                None
+                            </CommandItem>
+                            {parties.map((party) => (
+                                <CommandItem
+                                    key={party.id}
+                                    value={`${party.name} ${party.phone}`}
+                                    onSelect={() => {
+                                        onChange(party.id);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", value === party.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{party.name}</span>
+                                        <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 
 export default function PartyTransactionEditDialog({ transaction, parties, accounts, inventoryItems, onOpenChange, onSave, appSettings }: PartyTransactionEditDialogProps) {
   const form = useForm<FormValues>({
@@ -257,15 +315,9 @@ export default function PartyTransactionEditDialog({ transaction, parties, accou
                 </div>
             </div>
              <div className="space-y-1">
-                <Label>Party</Label>
+                <Label>Party (Customer/Supplier)</Label>
                 <Controller name="partyId" control={control} render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value || 'none'}>
-                        <SelectTrigger><SelectValue placeholder="Select party..." /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {parties.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                    <PartyCombobox parties={parties} value={field.value || ''} onChange={field.onChange} />
                 )} />
             </div>
 
