@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { InventoryItem, InventoryCategory, Party, AppSettings, Transaction } from '@/types';
+import type { InventoryItem, InventoryCategory, Party, AppSettings, Transaction, InventoryMovement } from '@/types';
 import { 
   subscribeToInventoryItems, 
   subscribeToInventoryCategories, 
@@ -14,6 +14,7 @@ import {
 } from '@/services/inventoryService';
 import { subscribeToParties } from '@/services/partyService';
 import { subscribeToAllTransactions } from '@/services/transactionService';
+import { getAppSettings } from '@/services/settingsService';
 import { uploadImage } from '@/services/storageService';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -656,7 +657,7 @@ export default function InventoryManager() {
                                 <p className="font-black text-sm">৳{item.price.toLocaleString()}</p>
                                 <Badge className={cn(
                                     "text-[10px] px-2 py-0.5 border-0 font-bold",
-                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-500 text-white"
+                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-50 text-white"
                                 )}>
                                     Stock: {item.quantity}
                                 </Badge>
