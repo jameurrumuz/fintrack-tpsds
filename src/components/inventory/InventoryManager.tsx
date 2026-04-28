@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -36,11 +36,9 @@ import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, 
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { cn } from '@/lib/utils';
-import { formatAmount } from '@/lib/utils';
-import { getAppSettings } from '@/services/settingsService';
-import { CameraCaptureDialog } from '../ui/camera-capture-dialog';
+import { cn, formatAmount, formatDate } from '@/lib/utils';
 import Image from 'next/image';
+import { CameraCaptureDialog } from '../ui/camera-capture-dialog';
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -578,7 +576,7 @@ export default function InventoryManager() {
       {loading ? (
           <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>
       ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredItems.map(item => {
                   const businessProfile = appSettings?.businessProfiles.find(p => p.name === item.via);
                   const isLowStock = item.quantity <= item.minStockLevel;
@@ -586,8 +584,8 @@ export default function InventoryManager() {
                   return (
                     <Card key={item.id} className="overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group relative bg-white">
                         {/* Header with Title Overlay */}
-                        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-gradient-to-b from-black/50 to-transparent">
-                            <p className="text-white font-bold text-xs truncate drop-shadow-sm">{item.name}</p>
+                        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-gradient-to-b from-black/50 to-transparent text-white drop-shadow-sm font-bold text-xs truncate">
+                            {item.name}
                         </div>
 
                         {/* Actions Overlay */}
@@ -670,7 +668,7 @@ export default function InventoryManager() {
           </div>
       ) : (
           /* List View (Table) */
-          <Card className="border-0 shadow-sm overflow-hidden">
+          <Card className="border-0 shadow-sm overflow-hidden bg-white">
               <CardContent className="p-0">
                   <div className="rounded-md border-x overflow-x-auto">
                       <Table>
