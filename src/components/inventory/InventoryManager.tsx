@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -31,7 +32,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, AlertTriangle, SlidersHorizontal, Loader2, X } from 'lucide-react';
+import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, AlertTriangle, SlidersHorizontal, Loader2, X, Grid, List, Boxes, DollarSign, ShoppingCart, Settings } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -39,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { formatAmount } from '@/lib/utils';
 import { getAppSettings } from '@/services/settingsService';
 import { CameraCaptureDialog } from '../ui/camera-capture-dialog';
+import Image from 'next/image';
 
 const itemSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -54,8 +56,24 @@ const itemSchema = z.object({
   imageUrl: z.string().optional(),
   price: z.coerce.number().min(0, "Price must be non-negative"),
   wholesalePrice: z.coerce.number().min(0, "Wholesale price must be non-negative"),
+  cost: z.coerce.number().min(0, "Cost must be non-negative"),
 });
 type ItemFormValues = z.infer<typeof itemSchema>;
+
+// Summary Card Component
+const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string; value: string | number; icon: any; colorClass: string }) => (
+    <Card className="shadow-sm border-0">
+        <CardContent className="p-4 flex flex-col gap-1">
+            <div className="flex justify-between items-start">
+                <p className="text-sm font-semibold text-muted-foreground">{title}</p>
+                <div className={cn("p-1.5 rounded-lg bg-muted", colorClass)}>
+                    <Icon className="h-4 w-4" />
+                </div>
+            </div>
+            <p className="text-2xl font-bold tracking-tight">{value}</p>
+        </CardContent>
+    </Card>
+);
 
 export const StockAdjustmentDialog = ({ item, open, onOpenChange, appSettings }: { item: InventoryItem | null; open: boolean; onOpenChange: (open: boolean) => void; appSettings: AppSettings | null; }) => {
     const [adjustmentType, setAdjustmentType] = useState<'addition' | 'subtraction' | 'transfer'>('addition');
@@ -200,6 +218,7 @@ export const ItemFormDialog = ({ open, onOpenChange, onSave, item, categories, p
         imageUrl: item.imageUrl || '',
         price: item.price,
         wholesalePrice: item.wholesalePrice || 0,
+        cost: item.cost || 0,
       });
       setImagePreview(item.imageUrl || null);
     } else {
@@ -207,7 +226,7 @@ export const ItemFormDialog = ({ open, onOpenChange, onSave, item, categories, p
         name: '', description: '', category: categories[0]?.name || '', brand: '', minStockLevel: 0,
         sku: `SKU-${Date.now()}`, via: appSettings?.businessProfiles?.[0]?.name || '',
         location: appSettings?.inventoryLocations?.[0] || 'default', barcode: '', supplier: '',
-        imageUrl: '', price: 0, wholesalePrice: 0,
+        imageUrl: '', price: 0, wholesalePrice: 0, cost: 0,
       });
       setImagePreview(null);
     }
@@ -265,7 +284,7 @@ export const ItemFormDialog = ({ open, onOpenChange, onSave, item, categories, p
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1"><Label>Cost Price</Label><Input type="number" step="0.01" {...form.register('cost' as any)} placeholder="0.00" disabled={!!item} /></div>
+            <div className="space-y-1"><Label>Cost Price *</Label><Input type="number" step="0.01" {...form.register('cost')} placeholder="0.00" /></div>
             <div className="space-y-1"><Label>Sale Price *</Label><Input type="number" step="0.01" {...form.register('price')} placeholder="0.00" /></div>
             <div className="space-y-1"><Label>Wholesale Price</Label><Input type="number" step="0.01" {...form.register('wholesalePrice')} placeholder="0.00" /></div>
           </div>
@@ -316,6 +335,7 @@ export default function InventoryManager() {
   const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isRecalculating, setIsRecalculating] = useState(false);
   
   const { toast } = useToast();
@@ -378,14 +398,23 @@ export default function InventoryManager() {
   const filteredItems = useMemo(() => {
     return items.filter(item => {
         const nameMatch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+                         (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()));
         const categoryMatch = selectedCategory === 'all' || item.category === selectedCategory;
         return nameMatch && categoryMatch;
     });
   }, [items, searchTerm, selectedCategory]);
 
+  const stats = useMemo(() => {
+    const totalItems = items.length;
+    const stockValueCost = items.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
+    const stockValueSale = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const lowStockCount = items.filter(i => i.quantity <= i.minStockLevel).length;
+    return { totalItems, stockValueCost, stockValueSale, lowStockCount };
+  }, [items]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-slate-100/50 -m-4 md:-m-6 lg:-m-8 p-4 md:p-6 lg:p-8 min-h-screen">
       <ItemFormDialog 
         open={isItemDialogOpen} 
         onOpenChange={setIsItemDialogOpen} 
@@ -403,153 +432,192 @@ export default function InventoryManager() {
         appSettings={appSettings} 
       />
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2"><Archive /> Inventory Management</h1>
-          <p className="text-muted-foreground mt-1">Add products, track stock levels, and manage categories.</p>
-        </div>
-        <div className="flex gap-2">
-            <Button onClick={handleRecalculateAll} variant="outline" disabled={isRecalculating}>
-                {isRecalculating ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
-                Sync All Stock
-            </Button>
-            <Button onClick={() => { setEditingItem(null); setIsItemDialogOpen(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Add Product
-            </Button>
-        </div>
+      {/* Top Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard title="Total Items" value={stats.totalItems} icon={Boxes} colorClass="text-blue-600" />
+        <SummaryCard title="Stock Value (Cost)" value={formatAmount(stats.stockValueCost)} icon={Archive} colorClass="text-orange-600" />
+        <SummaryCard title="Stock Value (Sale)" value={formatAmount(stats.stockValueSale)} icon={DollarSign} colorClass="text-green-600" />
+        <SummaryCard title="Low Stock" value={stats.lowStockCount} icon={AlertTriangle} colorClass="text-red-600" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="md:col-span-1 space-y-4">
-            <Card>
-                <CardHeader><CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quick Filters</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Search</Label>
-                        <div className="relative">
-                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Name or SKU..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8" />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Category</Label>
-                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Categories</SelectItem>
-                                {categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </CardContent>
-            </Card>
+      {/* Filter and Action Bar */}
+      <Card className="shadow-sm border-0 sticky top-16 z-20 bg-white/95 backdrop-blur-sm">
+        <CardContent className="p-3 flex flex-wrap items-center gap-3">
+            <div className="relative flex-grow min-w-[200px]">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                    placeholder="Search by name, SKU, or brand..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                    className="pl-9 bg-gray-50 border-gray-200"
+                />
+            </div>
             
-            <Card className="bg-primary/5">
-                <CardHeader className="p-4"><CardTitle className="text-sm">Stock Summary</CardTitle></CardHeader>
-                <CardContent className="p-4 pt-0 space-y-2">
-                    <div className="flex justify-between text-sm"><span>Total Items:</span> <span className="font-bold">{items.length}</span></div>
-                    <div className="flex justify-between text-sm"><span>Low Stock:</span> <span className="font-bold text-red-600">{items.filter(i => i.quantity <= i.minStockLevel).length}</span></div>
-                </CardContent>
-            </Card>
-        </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-[180px] bg-gray-50 border-gray-200">
+                    <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                </SelectContent>
+            </Select>
 
-        <div className="md:col-span-3">
-             <Card>
-                <CardContent className="p-0">
-                    <div className="rounded-md border overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[80px]">Image</TableHead>
-                                    <TableHead>Product Details</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead className="text-right">Price</TableHead>
-                                    <TableHead className="text-center">Stock</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow><TableCell colSpan={6} className="h-48 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" /></TableCell></TableRow>
-                                ) : filteredItems.length > 0 ? filteredItems.map(item => (
-                                    <TableRow key={item.id}>
-                                        <TableCell>
-                                            <Avatar className="h-12 w-12 rounded-md">
-                                                <AvatarImage src={item.imageUrl} className="object-cover" />
-                                                <AvatarFallback className="rounded-md"><Package /></AvatarFallback>
-                                            </Avatar>
-                                        </TableCell>
-                                        <TableCell>
-                                            <p className="font-bold text-sm">{item.name}</p>
-                                            <div className="flex gap-2 items-center mt-1">
-                                                <Badge variant="outline" className="text-[10px] font-mono">{item.sku}</Badge>
-                                                {item.brand && <span className="text-[10px] text-muted-foreground">{item.brand}</span>}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell><Badge variant="secondary">{item.category}</Badge></TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="text-sm font-bold">{formatAmount(item.price)}</div>
-                                            {item.wholesalePrice > 0 && <div className="text-[10px] text-muted-foreground">WS: {formatAmount(item.wholesalePrice)}</div>}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <div className="cursor-help">
-                                                            <div className={cn("text-lg font-bold", item.quantity <= item.minStockLevel ? 'text-red-600' : 'text-primary')}>
-                                                                {item.quantity}
-                                                            </div>
-                                                            {item.quantity <= item.minStockLevel && <AlertTriangle className="h-3 w-3 text-red-600 mx-auto" />}
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent className="p-0">
-                                                        <div className="p-2 bg-popover text-popover-foreground text-xs space-y-1">
-                                                            <p className="font-bold border-b pb-1 mb-1">Stock by Location</p>
-                                                            {item.stock && Object.entries(item.stock).map(([loc, qty]) => (
-                                                                <div key={loc} className="flex justify-between gap-4">
-                                                                    <span>{loc}:</span> <span className="font-mono">{qty}</span>
-                                                                </div>
-                                                            ))}
-                                                            {(!item.stock || Object.keys(item.stock).length === 0) && <p>No location data</p>}
-                                                        </div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit Product</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => setAdjustingItem(item)}><SlidersHorizontal className="mr-2 h-4 w-4" /> Stock Adjustment</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => recalculateStockForItem(item.id)}><RefreshCcw className="mr-2 h-4 w-4" /> Recalculate Stock</DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>Confirm Deletion</AlertDialogTitle><AlertDialogDescriptionComponent>Are you sure you want to delete {item.name}? This will remove all history for this product.</AlertDialogDescriptionComponent></AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => deleteInventoryItem(item.id)} className={cn(buttonVariants({ variant: 'destructive' }))}>Delete</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                    <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No products found.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-             </Card>
-        </div>
-      </div>
+            <Button variant="outline" className="gap-2 border-gray-200" onClick={() => router.push('/settings')}>
+                <SlidersHorizontal className="h-4 w-4" /> Manage
+            </Button>
+
+            <div className="flex items-center gap-1 border rounded-lg p-1 bg-gray-50">
+                <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('grid')}><Grid className="h-4 w-4" /></Button>
+                <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('list')}><List className="h-4 w-4" /></Button>
+            </div>
+
+            <Button onClick={handleRecalculateAll} className="bg-red-500 hover:bg-red-600 text-white gap-2 shadow-sm" disabled={isRecalculating}>
+                {isRecalculating ? <Loader2 className="animate-spin h-4 w-4" /> : <RefreshCcw className="h-4 w-4" />}
+                <span className="hidden sm:inline">Recalculate All</span>
+            </Button>
+
+            <Button onClick={() => { setEditingItem(null); setIsItemDialogOpen(true); }} className="bg-slate-700 hover:bg-slate-800 text-white gap-2 shadow-sm">
+                <Plus className="h-4 w-4" /> Add Item
+            </Button>
+        </CardContent>
+      </Card>
+
+      {/* Main Content Area */}
+      {loading ? (
+          <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>
+      ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {filteredItems.map(item => {
+                  const businessProfile = appSettings?.businessProfiles.find(p => p.name === item.via);
+                  const isLowStock = item.quantity <= item.minStockLevel;
+                  
+                  return (
+                    <Card key={item.id} className="overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group relative bg-white">
+                        {/* Header with Title Overlay */}
+                        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-gradient-to-b from-black/50 to-transparent">
+                            <p className="text-white font-bold text-xs truncate drop-shadow-sm">{item.name}</p>
+                        </div>
+
+                        {/* Actions Overlay */}
+                        <div className="absolute top-8 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full shadow-lg bg-white/90 backdrop-blur-sm"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setAdjustingItem(item)}><SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust Stock</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => recalculateStockForItem(item.id)}><RefreshCcw className="mr-2 h-4 w-4" /> Sync Stock</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescriptionComponent>This will remove the product and all associated history.</AlertDialogDescriptionComponent></AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => deleteInventoryItem(item.id)} className={cn(buttonVariants({ variant: 'destructive' }))}>Delete</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+
+                        {/* Image Container */}
+                        <div className="relative aspect-square w-full bg-muted flex items-center justify-center overflow-hidden">
+                            {item.imageUrl ? (
+                                <Image src={item.imageUrl} alt={item.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                            ) : (
+                                <div className="text-muted-foreground/20 font-bold text-xl select-none">400 × 400</div>
+                            )}
+                            
+                            {/* Profile Logo Overlay */}
+                            {businessProfile?.logoUrl && (
+                                <div className="absolute bottom-2 right-2 w-10 h-10 rounded-full border bg-white/80 backdrop-blur-sm p-1 shadow-sm">
+                                    <Image src={businessProfile.logoUrl} alt="Via" fill className="object-contain p-1" />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer Info */}
+                        <CardContent className="p-3 space-y-3 mt-auto">
+                            <Badge variant="outline" className="text-[10px] h-6 px-3 bg-gray-50 border-gray-100">{item.category}</Badge>
+                            
+                            <div className="flex justify-between items-center">
+                                <p className="font-black text-sm">৳{item.price.toLocaleString()}</p>
+                                <Badge className={cn(
+                                    "text-[10px] px-2 py-0.5 border-0 font-bold",
+                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-500 text-white"
+                                )}>
+                                    Stock: {item.quantity}
+                                </Badge>
+                            </div>
+                        </CardContent>
+                    </Card>
+                  );
+              })}
+          </div>
+      ) : (
+          /* List View (Table) */
+          <Card className="border-0 shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                  <div className="rounded-md border-x overflow-x-auto">
+                      <Table>
+                          <TableHeader className="bg-muted/50">
+                              <TableRow>
+                                  <TableHead className="w-[60px]"></TableHead>
+                                  <TableHead>Product Name</TableHead>
+                                  <TableHead>SKU</TableHead>
+                                  <TableHead>Category</TableHead>
+                                  <TableHead className="text-right">Price</TableHead>
+                                  <TableHead className="text-center">Stock</TableHead>
+                                  <TableHead className="w-[50px]"></TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {filteredItems.length > 0 ? filteredItems.map(item => (
+                                  <TableRow key={item.id} className="hover:bg-muted/30">
+                                      <TableCell>
+                                          <div className="relative h-10 w-10 rounded-md overflow-hidden bg-muted">
+                                              {item.imageUrl ? <Image src={item.imageUrl} alt="" fill className="object-cover" /> : <Package className="p-2 text-muted-foreground/30" />}
+                                          </div>
+                                      </TableCell>
+                                      <TableCell>
+                                          <p className="font-bold text-sm">{item.name}</p>
+                                          <p className="text-[10px] text-muted-foreground">{item.brand}</p>
+                                      </TableCell>
+                                      <TableCell><span className="text-xs font-mono">{item.sku}</span></TableCell>
+                                      <TableCell><Badge variant="secondary" className="text-[10px]">{item.category}</Badge></TableCell>
+                                      <TableCell className="text-right font-bold">{formatAmount(item.price)}</TableCell>
+                                      <TableCell className="text-center">
+                                          <Badge className={cn(item.quantity <= item.minStockLevel ? "bg-red-500" : "bg-green-500")}>
+                                              {item.quantity}
+                                          </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                          <DropdownMenu>
+                                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                  <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => setAdjustingItem(item)}><SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust</DropdownMenuItem>
+                                                  <DropdownMenuSeparator />
+                                                  <DropdownMenuItem onClick={() => deleteInventoryItem(item.id)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                          </DropdownMenu>
+                                      </TableCell>
+                                  </TableRow>
+                              )) : (
+                                  <TableRow><TableCell colSpan={7} className="h-32 text-center text-muted-foreground">No products match your search.</TableCell></TableRow>
+                              )}
+                          </TableBody>
+                      </Table>
+                  </div>
+              </CardContent>
+          </Card>
+      )}
     </div>
   );
 }
