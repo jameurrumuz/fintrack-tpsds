@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
@@ -265,6 +266,16 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     }
   };
 
+  const handleDisableTransaction = async (id: string) => {
+    try {
+      await toggleTransaction(id, false);
+      toast({ title: 'Transaction Disabled', description: 'The transaction has been moved to the activity log.' });
+    } catch (error: any) {
+      console.error('Failed to disable transaction:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not disable transaction.' });
+    }
+  };
+
   const openForm = (mode: 'give' | 'receive' | 'advance', type: Transaction['type'], desc: string) => {
       setFormMode(mode);
       transactionForm.setValue('type', type);
@@ -365,7 +376,46 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                     <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
                                     <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
                                     <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
-                                    <TableCell className="text-right no-print"><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTransaction(t)}><MoreVertical className="h-3 w-3" /></Button></TableCell>
+                                    <TableCell className="text-right no-print">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6">
+                                                    <MoreVertical className="h-3 w-3" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => setEditingTransaction(t)}>
+                                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => {
+                                                    if (t.invoiceNumber) setViewingInvoice(t);
+                                                    else setViewingReceipt(t);
+                                                }}>
+                                                    <FileText className="mr-2 h-4 w-4" /> Receipt/Invoice
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" /> Disable
+                                                        </DropdownMenuItem>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This will disable the transaction and it will no longer affect balances. You can restore it from the Activity Log.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDisableTransaction(t.id)}>Disable</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
                                 </TableRow>
                               );
                             })}
