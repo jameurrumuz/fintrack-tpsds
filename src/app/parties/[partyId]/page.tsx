@@ -1,17 +1,17 @@
 
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState, use, useRef } from 'react';
+import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Transaction, Party, Account, AppSettings, TransactionVia, Loan, AmortizationEntry, SheetRow } from '@/types';
+import type { Transaction, Party, Account, AppSettings } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
 import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction } from '@/services/transactionService';
 import { getAppSettings } from '@/services/settingsService';
-import { markEmiAsPaid, deleteLoan, updateLoanDetails } from '@/services/partyService';
+import { subscribeToParties } from '@/services/partyService';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,31 +21,31 @@ import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } f
 import { 
   Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, 
   MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, 
-  Share2, Landmark, FileText, History, Search, Save, X, ChevronLeft, ChevronRight, 
-  Check, Phone, Mail, Eye, BarChart2, MinusCircle, LayoutDashboard, Calculator, 
-  Package, ChevronDown, ChevronUp, Zap, Circle, CheckCircle, Repeat 
+  Share2, Landmark, FileText, History, Search, Save, X, ChevronDown, ChevronUp, 
+  Repeat, Check, ChevronsUpDown, MinusCircle 
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { DatePicker } from '@/components/ui/date-picker';
-import { format as formatFns, subDays, parseISO, isValid } from 'date-fns';
+import { format as formatFns, parseISO, isValid } from 'date-fns';
 import PartyTransactionEditDialog from '@/components/PartyTransactionEditDialog';
 import PaymentReceiptDialog from '@/components/PaymentReceiptDialog';
 import InvoiceDialog from '@/components/pos/InvoiceDialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import QRCode from 'qrcode';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { fetchSheetData } from '@/services/smsSyncService';
+import type { SheetRow } from '@/types';
+import { motion } from 'framer-motion';
 
 const partyTransactionSchema = z.object({
   date: z.date(),
@@ -69,16 +69,69 @@ const partyTransactionSchema = z.object({
 
 type FormValues = z.infer<typeof partyTransactionSchema>;
 
+// --- Party Selector Component ---
+const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], currentPartyId: string }) => {
+    const router = useRouter();
+    const [open, setOpen] = useState(false);
+    const selectedParty = parties.find(p => p.id === currentPartyId);
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between h-10 border-0 bg-transparent hover:bg-muted/50 p-0 px-2"
+                >
+                    <div className="flex flex-col items-start text-left overflow-hidden">
+                        <span className="text-sm font-bold truncate w-full">{selectedParty?.name || 'Select Party...'}</span>
+                        <span className="text-[10px] text-muted-foreground">{selectedParty?.phone || 'No Phone'}</span>
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Search party by name or phone..." />
+                    <CommandList>
+                        <CommandEmpty>No party found.</CommandEmpty>
+                        <CommandGroup>
+                            {parties.map((party) => (
+                                <CommandItem
+                                    key={party.id}
+                                    value={`${party.name} ${party.phone}`}
+                                    onSelect={() => {
+                                        router.push(`/parties/${party.id}`);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{party.name}</span>
+                                        <span className="text-xs text-muted-foreground">{party.phone}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { partyId } = use(params);
   const router = useRouter();
   const { toast } = useToast();
+  
   const [party, setParty] = useState<Party | null>(null);
+  const [parties, setParties] = useState<Party[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
   
   const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', via: 'all' });
   const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(true);
@@ -86,9 +139,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const [activeTab, setActiveTab] = useState("transactions");
   
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [formMode, setFormMode] = useState<'give' | 'receive' | 'advance'>('give');
-  const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
   const [isGiveOptionsOpen, setIsGiveOptionsOpen] = useState(false);
+  const [isReceiveOptionsOpen, setIsReceiveOptionsOpen] = useState(false);
   const [isAdvanceOptionsOpen, setIsAdvanceOptionsOpen] = useState(false);
   
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -97,7 +149,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   
   const [sendSms, setSendSms] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [isHeaderActionsExpanded, setIsHeaderActionsExpanded] = useState(false);
   
   const [smsData, setSmsData] = useState<SheetRow[]>([]);
@@ -119,7 +170,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   });
 
   useEffect(() => {
-    setIsHydrated(true);
     if (partyId) {
       setLoading(true);
       const fetchInitial = async () => {
@@ -134,22 +184,20 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
           setAppSettings(settings);
       };
       fetchInitial();
+      
       const unsubTx = subscribeToTransactionsForParty(partyId, setTransactions, (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
       const unsubAcc = subscribeToAccounts(setAccounts, console.error);
+      const unsubParties = subscribeToParties(setParties, console.error);
+      
       const timer = setTimeout(() => setLoading(false), 500);
-      return () => { unsubTx(); unsubAcc(); clearTimeout(timer); };
+      return () => { unsubTx(); unsubAcc(); unsubParties(); clearTimeout(timer); };
     }
   }, [partyId, toast, transactionForm]);
 
-  useEffect(() => {
-    if (isHeaderActionsExpanded) {
-        const timer = setTimeout(() => setIsHeaderActionsExpanded(false), 5000);
-        return () => clearTimeout(timer);
-    }
-  }, [isHeaderActionsExpanded]);
-
   const { groupedTransactions, currentBalance, openingBalance, analysis, stats } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
+    
+    // Sort oldest to newest for consistent running balance calculation
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -166,9 +214,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const withRunning = sortedTimeline.map(t => {
         const effect = getPartyBalanceEffect(t);
         running += effect;
-        // Total calculations for analysis tab (Credits - Debits logic)
+        
+        // Sum total Give/Receive for analysis
         if (['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type)) totalReceive += t.amount;
         if (['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type)) totalGive += t.amount;
+        
         return { ...t, runningBalance: running };
     });
 
@@ -181,8 +231,13 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
+    // Grouping for table display (Oldest at top)
     const grouped: { [key: string]: any[] } = {};
-    filtered.forEach(t => { if(!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
+    filtered.forEach(t => { 
+        if(!grouped[t.date]) grouped[t.date] = []; 
+        grouped[t.date].push(t); 
+    });
+    
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
@@ -217,17 +272,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         }
     };
   }, [transactions, filters, isDateFilterEnabled, includeInternalTx]);
-
-  const businessProfile = useMemo(() => appSettings?.businessProfiles.find(p => p.name === party?.group) || appSettings?.businessProfiles[0], [appSettings, party]);
-
-  useEffect(() => {
-    if (party && businessProfile && isHydrated) {
-        const qrText = `Party: ${party.name}\nBalance: ${formatAmount(currentBalance)}\nFrom: ${businessProfile.name}`;
-        QRCode.toDataURL(qrText, { width: 100, margin: 1, errorCorrectionLevel: 'H' }, (err, url) => {
-            if (!err) setQrCodeDataUrl(url);
-        });
-    }
-  }, [party, businessProfile, currentBalance, isHydrated]);
 
   const handleFetchSms = async () => {
       setSmsLoading(true);
@@ -278,8 +322,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     }
   };
 
-  const openForm = (mode: 'give' | 'receive' | 'advance', type: Transaction['type'], desc: string) => {
-      setFormMode(mode);
+  const openForm = (type: Transaction['type'], desc: string) => {
       transactionForm.setValue('type', type);
       transactionForm.setValue('description', desc);
       setIsGiveOptionsOpen(false);
@@ -292,15 +335,10 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     if (!party) return;
     const params = new URLSearchParams();
     params.set('partyIds', party.id);
-    
-    if (isDateFilterEnabled && filters.dateFrom && filters.dateTo) {
-        params.set('dateFrom', filters.dateFrom);
-        params.set('dateTo', filters.dateTo);
-    } else {
-        if (stats.startDate) params.set('dateFrom', stats.startDate);
-        if (stats.endDate) params.set('dateTo', stats.endDate);
-    }
-    
+    const fromDate = isDateFilterEnabled && filters.dateFrom ? filters.dateFrom : stats.startDate;
+    const toDate = isDateFilterEnabled && filters.dateTo ? filters.dateTo : stats.endDate;
+    if (fromDate) params.set('dateFrom', fromDate);
+    if (toDate) params.set('dateTo', toDate);
     router.push(`/reports/stock-in-out?${params.toString()}`);
   }
 
@@ -314,7 +352,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" asChild className="h-8 w-8"><Link href="/parties"><ArrowLeft className="h-4 w-4" /></Link></Button>
                         <Avatar className="h-8 w-8"><AvatarFallback className="bg-primary text-white font-bold text-xs">{party?.name?.charAt(0)}</AvatarFallback></Avatar>
-                        <div><h1 className="text-sm font-bold truncate max-w-[150px]">{party?.name}</h1><p className="text-[10px] text-muted-foreground">{party?.phone || 'No Phone'}</p></div>
+                        <div className="min-w-[150px]"><PartySearchSwitcher parties={parties} currentPartyId={party.id} /></div>
                     </div>
                 </div>
                 <div className="mt-2">
@@ -324,7 +362,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                             <p className={cn("text-3xl font-black", currentBalance >= 0 ? "text-red-600" : "text-green-600")}>৳{formatAmount(Math.abs(currentBalance), false)}</p>
                             <motion.div initial={false} animate={{ height: isHeaderActionsExpanded ? 'auto' : 0, opacity: isHeaderActionsExpanded ? 1 : 0 }} className="overflow-hidden">
                                 <div className="flex justify-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                    <button onClick={() => openForm('give', 'spent', `Expense for ${party.name}`)} className="flex flex-col items-center gap-1"><div className="p-2 rounded-full bg-red-100 text-red-600"><MinusCircle className="h-4 w-4"/></div><span className="text-[10px] font-bold text-gray-500 uppercase">EXPENSE</span></button>
+                                    <button onClick={() => openForm('spent', `Expense for ${party.name}`)} className="flex flex-col items-center gap-1"><div className="p-2 rounded-full bg-red-100 text-red-600"><MinusCircle className="h-4 w-4"/></div><span className="text-[10px] font-bold text-gray-500 uppercase">EXPENSE</span></button>
                                     <Link href={`/pos?partyId=${partyId}`} className="flex flex-col items-center gap-1"><div className="p-2 rounded-full bg-green-100 text-green-600"><ShoppingCart className="h-4 w-4"/></div><span className="text-[10px] font-bold text-gray-500 uppercase">POS</span></Link>
                                     <button onClick={() => window.print()} className="flex flex-col items-center gap-1"><div className="p-2 rounded-full bg-gray-100 text-gray-600"><Printer className="h-4 w-4"/></div><span className="text-[10px] font-bold text-gray-500 uppercase">PRINT</span></button>
                                     <button onClick={() => window.print()} className="flex flex-col items-center gap-1"><div className="p-2 rounded-full bg-teal-100 text-teal-600"><Share2 className="h-4 w-4"/></div><span className="text-[10px] font-bold text-gray-500 uppercase">SHARE</span></button>
@@ -367,8 +405,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                           <React.Fragment key={date}>
                             <TableRow className="bg-primary/5"><TableCell colSpan={6} className="py-1 px-3 font-bold text-[10px] text-primary uppercase">{formatDate(date)}</TableCell></TableRow>
                             {txs.map((t) => {
-                              const isDebit = ['give', 'credit_sale', 'spent', 'purchase', 'purchase_return', 'credit_give'].includes(t.type);
-                              const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type);
+                              const effect = getPartyBalanceEffect(t);
+                              const isDebit = effect < 0;
+                              const isCredit = effect > 0;
                               const accName = accounts.find(a => a.id === t.accountId)?.name || t.payments?.map(p => accounts.find(a => a.id === p.accountId)?.name).join(', ') || '';
                               return (
                                 <TableRow key={t.id} className="group hover:bg-muted/30">
@@ -430,7 +469,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             <TabsContent value="analysis" className="m-0 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><BarChart2/> Summary</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><div className="flex justify-between border-b pb-1"><span>Start Date</span><span className="font-bold">{stats.startDate ? formatDate(stats.startDate) : '-'}</span></div><div className="flex justify-between border-b pb-1"><span>Total Tx</span><span className="font-bold">{stats.totalCount}</span></div><div className="flex justify-between border-b pb-1"><span>Total Cr (Recv)</span><span className="font-bold text-green-600">{formatAmount(analysis.totalReceive)}</span></div><div className="flex justify-between border-b pb-1"><span>Total Dr (Gave)</span><span className="font-bold text-red-600">{formatAmount(analysis.totalGive)}</span></div></CardContent></Card>
-                    <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Package/> Sales & Returns</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Avg</TableHead><TableHead className="text-right">Ret</TableHead></TableRow></TableHeader><TableBody>{stats.productStats.map(ps => (<TableRow key={ps.id}><TableCell className="text-[10px]">{ps.name}</TableCell><TableCell className="text-center font-bold">{ps.quantity}</TableCell><TableCell className="text-right font-mono text-[10px]">{formatAmount(ps.avgPrice)}</TableCell><TableCell className="text-right text-red-600 font-bold">{ps.returns}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card>
+                    <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Package/> Sales & Returns</CardTitle></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Avg</TableHead><TableHead className="text-right">Ret</TableHead></TableRow></TableHeader><TableBody>{stats.productStats.map(ps => (<TableRow key={ps.id}><TableCell className="text-[10px]">{ps.name}</TableCell><TableCell className="text-center font-bold">{ps.quantity}</TableCell><TableCell className="text-right font-mono text-[10px]">{formatAmount(ps.totalValue / ps.quantity)}</TableCell><TableCell className="text-right text-red-600 font-bold">{ps.returns}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card>
                 </div>
             </TabsContent>
 
@@ -458,7 +497,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     </div>
                     <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} /></div>
                     <div className="grid grid-cols-2 gap-4">
-                        {!['credit_give', 'credit_income'].includes(transactionForm.watch('type')) && (<div className="space-y-1"><Label>Account</Label><Controller name="accountId" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent></Select>)} /></div>)}
+                        {!['credit_give', 'credit_income', 'credit_purchase', 'credit_sale'].includes(transactionForm.watch('type')) && (<div className="space-y-1"><Label>Account</Label><Controller name="accountId" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent></Select>)} /></div>)}
                         <div className="space-y-1"><Label>Profile (Via)</Label><Controller name="via" control={transactionForm.control} render={({ field }) => (
                             <Select onValueChange={field.onChange} value={field.value}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -481,9 +520,15 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
             </DialogContent>
         </Dialog>
 
-        <Dialog open={isGiveOptionsOpen} onOpenChange={setIsGiveOptionsOpen}><DialogContent><DialogHeader><DialogTitle>Select "Give" Type</DialogTitle></DialogHeader><div className="grid gap-3 py-4"><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('give', 'give', `Paid to ${party?.name}`)}><div className="p-2 bg-red-100 rounded-full text-red-600"><Wallet/></div><div className="text-left"><p className="font-bold">Give (Paid)</p><p className="text-xs text-muted-foreground text-[10px]">Cash/Bank payment</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('give', 'credit_give', `Due to ${party?.name}`)}><div className="p-2 bg-orange-100 rounded-full text-orange-600"><HandCoins/></div><div className="text-left"><p className="font-bold">Credit Give (Due)</p><p className="text-xs text-muted-foreground text-[10px]">Record due amount</p></div></Button></div></DialogContent></Dialog>
-        <Dialog open={isReceiveOptionsOpen} onOpenChange={setIsReceiveOptionsOpen}><DialogContent><DialogHeader><DialogTitle>Select "Receive" Type</DialogTitle></DialogHeader><div className="grid gap-3 py-4"><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('receive', 'receive', `Received from ${party?.name}`)}><div className="p-2 bg-green-100 rounded-full text-green-600"><Wallet/></div><div className="text-left"><p className="font-bold">Receive Payment</p><p className="text-xs text-muted-foreground text-[10px]">Cash/Bank entry</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('receive', 'credit_income', `Income from ${party?.name}`)}><div className="p-2 bg-blue-100 rounded-full text-blue-600"><HandCoins/></div><div className="text-left"><p className="font-bold">Credit Income (Due)</p><p className="text-xs text-muted-foreground text-[10px]">Record without cash</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => { setIsReceiveOptionsOpen(false); setIsAdvanceOptionsOpen(true); }}><div className="p-2 bg-purple-100 rounded-full text-purple-600"><Repeat/></div><div className="text-left"><p className="font-bold">Advance Receive</p><p className="text-xs text-muted-foreground text-[10px]">Special inward entry</p></div></Button></div></DialogContent></Dialog>
-        <Dialog open={isAdvanceOptionsOpen} onOpenChange={setIsAdvanceOptionsOpen}><DialogContent><DialogHeader><DialogTitle>Receive as</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-2 py-4">{['receive', 'credit_purchase', 'purchase', 'income', 'credit_income'].map(t => (<Button key={t} variant="outline" className="h-12 text-xs uppercase" onClick={() => openForm('advance', t as any, `Advance ${t} from ${party?.name}`)}>{t.replace('_', ' ')}</Button>))}</div></DialogContent></Dialog>
+        <Dialog open={isGiveOptionsOpen} onOpenChange={setIsGiveOptionsOpen}><DialogContent><DialogHeader><DialogTitle>Select "Give" Type</DialogTitle></DialogHeader><div className="grid gap-3 py-4"><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('give', `Paid to ${party?.name}`)}><div className="p-2 bg-red-100 rounded-full text-red-600"><Wallet/></div><div className="text-left"><p className="font-bold">Give (Paid)</p><p className="text-xs text-muted-foreground text-[10px]">Cash/Bank payment</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('credit_give', `Due to ${party?.name}`)}><div className="p-2 bg-orange-100 rounded-full text-orange-600"><HandCoins/></div><div className="text-left"><p className="font-bold">Credit Give (Due)</p><p className="text-xs text-muted-foreground text-[10px]">Record due amount</p></div></Button></div></DialogContent></Dialog>
+        <Dialog open={isReceiveOptionsOpen} onOpenChange={setIsReceiveOptionsOpen}><DialogContent><DialogHeader><DialogTitle>Select "Receive" Type</DialogTitle></DialogHeader><div className="grid gap-3 py-4"><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('receive', `Received from ${party?.name}`)}><div className="p-2 bg-green-100 rounded-full text-green-600"><Wallet/></div><div className="text-left"><p className="font-bold">Receive Payment</p><p className="text-xs text-muted-foreground text-[10px]">Cash/Bank entry</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => openForm('credit_income', `Income from ${party?.name}`)}><div className="p-2 bg-blue-100 rounded-full text-blue-600"><HandCoins/></div><div className="text-left"><p className="font-bold">Credit Income (Due)</p><p className="text-xs text-muted-foreground text-[10px]">Record without cash</p></div></Button><Button variant="outline" className="h-16 justify-start gap-4" onClick={() => { setIsReceiveOptionsOpen(false); setIsAdvanceOptionsOpen(true); }}><div className="p-2 bg-purple-100 rounded-full text-purple-600"><Repeat/></div><div className="text-left"><p className="font-bold">Advance Receive</p><p className="text-xs text-muted-foreground text-[10px]">Special inward entry</p></div></Button></div></DialogContent></Dialog>
+        <Dialog open={isAdvanceOptionsOpen} onOpenChange={setIsAdvanceOptionsOpen}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Receive as</DialogTitle></DialogHeader><div className="grid grid-cols-1 gap-2 py-4">
+            <Button variant="outline" className="h-14 justify-start px-4 text-xs font-bold uppercase" onClick={() => openForm('receive', `Advance Payment from ${party?.name}`)}><Wallet className="mr-3 h-5 w-5 text-green-600"/> Payment</Button>
+            <Button variant="outline" className="h-14 justify-start px-4 text-xs font-bold uppercase" onClick={() => openForm('credit_purchase', `Advance Credit Purchase from ${party?.name}`)}><FileText className="mr-3 h-5 w-5 text-orange-600"/> Credit Purchase</Button>
+            <Button variant="outline" className="h-14 justify-start px-4 text-xs font-bold uppercase" onClick={() => openForm('purchase', `Advance Cash Purchase from ${party?.name}`)}><ShoppingCart className="mr-3 h-5 w-5 text-red-600"/> Cash Purchase</Button>
+            <Button variant="outline" className="h-14 justify-start px-4 text-xs font-bold uppercase" onClick={() => openForm('income', `Advance Other Income from ${party?.name}`)}><TrendingUp className="mr-3 h-5 w-5 text-blue-600"/> Other Income</Button>
+            <Button variant="outline" className="h-14 justify-start px-4 text-xs font-bold uppercase" onClick={() => openForm('credit_income', `Advance Credit Income from ${party?.name}`)}><HandCoins className="mr-3 h-5 w-5 text-purple-600"/> Credit Income</Button>
+        </div></DialogContent></Dialog>
         
         <Dialog open={isSmsSearchOpen} onOpenChange={setIsSmsSearchOpen}>
             <DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Select Transaction from SMS</DialogTitle></DialogHeader><div className="max-h-[60vh] overflow-y-auto space-y-2">{smsData.map((sms, i) => (<div key={i} className="p-3 border rounded-md hover:bg-muted cursor-pointer transition-colors" onClick={() => selectSms(sms)}><div className="flex justify-between text-[10px] text-muted-foreground mb-1"><span>{sms.name}</span><span>{sms.date}</span></div><p className="text-xs leading-tight">{sms.message}</p></div>))}{smsData.length === 0 && <p className="text-center py-10 opacity-50">No SMS found in sheet.</p>}</div></DialogContent>
@@ -503,3 +548,4 @@ export default function PartyLedgerPageWrapper(props: { params: Promise<{ partyI
     </Suspense>
   );
 }
+
