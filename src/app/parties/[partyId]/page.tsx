@@ -19,13 +19,13 @@ import { useToast } from '@/hooks/use-toast';
 import { formatAmount, formatDate, getPartyBalanceEffect, cn, cleanUndefined } from '@/lib/utils';
 import { 
   Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, 
-  MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, 
+  MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, 
   Share2, Landmark, FileText, History, Search, Save, X, ChevronDown, ChevronUp, 
   Repeat, Check, ChevronsUpDown, MinusCircle, BarChart2, Package, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -91,7 +91,7 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
             </PopoverTrigger>
             <PopoverContent className="w-[320px] p-0" align="start">
                 <Command>
-                    <CommandInput placeholder="Search party by name or phone..." />
+                    <CommandInput placeholder="Search party..." />
                     <CommandList>
                         <CommandEmpty>No party found.</CommandEmpty>
                         <CommandGroup>
@@ -105,64 +105,6 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
                                     }}
                                 >
                                     <Check className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{party.name}</span>
-                                        <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
-                                    </div>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    );
-};
-
-const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party..." }: { parties: Party[], value: string, onChange: (value: string) => void, placeholder?: string }) => {
-    const [open, setOpen] = useState(false);
-    const selectedParty = parties.find(p => p.id === value);
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between font-normal h-10"
-                >
-                    {value && selectedParty ? selectedParty.name : placeholder}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[320px] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="Search party..." />
-                    <CommandList>
-                        <CommandEmpty>Not found.</CommandEmpty>
-                        <CommandGroup>
-                            <CommandItem
-                                key="none-party"
-                                value="none"
-                                onSelect={() => {
-                                    onChange("none");
-                                    setOpen(false);
-                                }}
-                            >
-                                <Check className={cn("mr-2 h-4 w-4", value === "none" ? "opacity-100" : "opacity-0")} />
-                                None
-                            </CommandItem>
-                            {parties.map((party) => (
-                                <CommandItem
-                                    key={party.id}
-                                    value={`${party.name} ${party.phone}`}
-                                    onSelect={() => {
-                                        onChange(party.id);
-                                        setOpen(false);
-                                    }}
-                                >
-                                    <Check className={cn("mr-2 h-4 w-4", value === party.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span className="font-medium">{party.name}</span>
                                         <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
@@ -253,6 +195,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, analysis, stats } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
+    // Sort oldest first for running balance calculation
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -268,7 +211,11 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
     const withRunning = sortedTimeline.map(t => {
         const effect = getPartyBalanceEffect(t);
-        running += effect;
+        // Rules: Cash Sale, Income, Expense don't affect ledger balance
+        const shouldAffectBalance = !['sale', 'purchase', 'income', 'spent'].includes(t.type);
+        if (shouldAffectBalance) {
+            running += effect;
+        }
         
         if (['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type)) totalReceive += t.amount;
         if (['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type)) totalGive += t.amount;
@@ -279,7 +226,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const opening = isDateFilterEnabled ? withRunning.filter(t => t.date < filters.dateFrom).pop()?.runningBalance || 0 : 0;
 
     let filtered = withRunning.filter(t => {
-        if (!includeInternalTx && getPartyBalanceEffect(t) === 0) return false;
+        if (!includeInternalTx && !['credit_sale', 'credit_purchase', 'credit_give', 'credit_income', 'receive', 'give'].includes(t.type)) return false;
         if (filters.via !== 'all' && t.via !== filters.via) return false;
         if (!isDateFilterEnabled) return true;
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
@@ -291,6 +238,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         grouped[t.date].push(t); 
     });
     
+    // Final grouping sorted ASCENDING (Oldest to Newest) as per RULES.md
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
@@ -444,8 +392,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                 <div className="flex flex-wrap items-center gap-3 bg-background p-3 rounded-lg border shadow-sm no-print mb-4">
                     <div className="flex-1 min-w-[120px] space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">Start</Label><Input type="date" value={filters.dateFrom} onChange={e => setFilters({...filters, dateFrom: e.target.value})} className="h-9 text-xs" /></div>
                     <div className="flex-1 min-w-[120px] space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">End</Label><Input type="date" value={filters.dateTo} onChange={e => setFilters({...filters, dateTo: e.target.value})} className="h-9 text-xs" /></div>
-                    <div className="flex items-center space-x-2"><Switch checked={!isDateFilterEnabled} onCheckedChange={v => setIsDateFilterEnabled(!v)} /><Label className="text-[10px] font-bold uppercase text-muted-foreground">All Tx</Label></div>
-                    <div className="flex items-center space-x-2"><Checkbox id="inc-exp" checked={includeInternalTx} onCheckedChange={v => setIncludeInternalTx(!!v)} /><Label htmlFor="inc-exp" className="text-[10px] font-bold uppercase text-muted-foreground">INC/EXP</Label></div>
+                    <div className="flex items-center space-x-2 pb-2"><Switch checked={!isDateFilterEnabled} onCheckedChange={v => setIsDateFilterEnabled(!v)} /><Label className="text-[10px] font-bold uppercase text-muted-foreground">All Tx</Label></div>
+                    <div className="flex items-center space-x-2 pb-2"><Checkbox id="inc-exp" checked={includeInternalTx} onCheckedChange={v => setIncludeInternalTx(!!v)} /><Label htmlFor="inc-exp" className="text-[10px] font-bold uppercase text-muted-foreground">INC/EXP</Label></div>
                     <Button variant="outline" size="sm" className="h-9 gap-1 text-[10px] font-bold uppercase" onClick={goToStockInOut}><Repeat className="h-3.5 w-3.5"/> Go to in/out</Button>
                 </div>
 
@@ -496,9 +444,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                            <AlertDialogDescriptionComponent>
+                                                            <AlertDialogDescription>
                                                                 This will disable the transaction and it will no longer affect balances. You can restore it from the Activity Log.
-                                                            </AlertDialogDescriptionComponent>
+                                                            </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -550,22 +498,33 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                     </div>
                     <div className="space-y-1"><Label>Description</Label><Input {...transactionForm.register('description')} /></div>
                     <div className="grid grid-cols-2 gap-4">
-                        {!['credit_give', 'credit_income', 'credit_purchase', 'credit_sale'].includes(transactionForm.watch('type')) && (<div className="space-y-1"><Label>Account</Label><Controller name="accountId" control={transactionForm.control} render={({ field }) => (<Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent></Select>)} /></div>)}
-                        <div className="space-y-1"><Label>Profile (Via)</Label><Controller name="via" control={transactionForm.control} render={({ field }) => (
+                        {!['credit_give', 'credit_income', 'credit_purchase', 'credit_sale'].includes(transactionForm.watch('type')) && (<div className="space-y-1"><Label>Account</Label><Controller name="accountId" control={transactionForm.control} render={({ field }) => (
                             <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                                <SelectContent>{accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}</SelectContent>
                             </Select>
-                        )} /></div>
+                        )} /></div>)}
+                        <div className="space-y-1">
+                            <Label>Profile (Via)</Label>
+                            <Controller name="via" control={transactionForm.control} render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                        <div className="space-y-1"><Label>Charge</Label><Input type="number" {...transactionForm.register('charge')} /></div>
-                        <div className="space-y-1"><Label>Charge Via</Label><Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        )} /></div>
+                        <div className="space-y-1"><Label>Charge</Label><Input type="number" step="0.01" {...transactionForm.register('charge')} /></div>
+                        <div className="space-y-1">
+                            <Label>Charge Via</Label>
+                            <Controller name="chargeVia" control={transactionForm.control} render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>{appSettings?.businessProfiles.map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                        </div>
                     </div>
                     <div className="flex items-center justify-center gap-2 pt-2"><Switch checked={sendSms} onCheckedChange={setSendSms}/><Label>Send SMS</Label></div>
                     <DialogFooter><Button type="submit" disabled={isSaving} className="w-full">{isSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} Save Transaction</Button></DialogFooter>

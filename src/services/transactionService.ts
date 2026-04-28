@@ -91,8 +91,6 @@ export function subscribeToTransactionsForPartyIds(
   if (!collectionRef || partyIds.length === 0) return () => {};
 
   // Firestore "in" queries are limited to 10 items.
-  // For simplicity, we fetch in chunks if needed or handle filtering on client.
-  // For most staff scenarios, they see fewer than 10 parties, but let's be safe.
   const q = query(collectionRef, where('partyId', 'in', partyIds.slice(0, 10)));
 
   return onSnapshot(q, (snapshot) => {
