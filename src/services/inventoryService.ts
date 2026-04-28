@@ -33,8 +33,10 @@ export const mapDocToInventoryItem = (doc: any): InventoryItem => {
         ...data,
         price: parseFloat(data.price) || 0,
         cost: parseFloat(data.cost) || 0,
-        createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : new Date().toISOString(),
-        updatedAt: (data.updatedAt as Timestamp)?.toDate ? (data.updatedAt as Timestamp).toDate().toISOString() : new Date().toISOString(),
+        quantity: parseFloat(data.quantity) || 0,
+        minStockLevel: parseFloat(data.minStockLevel) || 0,
+        createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toISOString() : data.createdAt,
+        updatedAt: (data.updatedAt as Timestamp)?.toDate ? (data.updatedAt as Timestamp).toDate().toISOString() : data.updatedAt,
         stock: data.stock || {},
         costHistory: data.costHistory || [],
     } as InventoryItem;
@@ -244,8 +246,10 @@ export async function recalculateStockForItem(itemId: string): Promise<void> {
   if (!db) throw new Error('Firebase is not configured.');
 
   // Fetch data
-  const txSnap = await getDocs(collection(db, 'transactions'));
-  const movSnap = await getDocs(query(collection(db, 'inventoryMovements'), where('itemId', '==', itemId)));
+  const [txSnap, movSnap] = await Promise.all([
+      getDocs(collection(db, 'transactions')),
+      getDocs(query(collection(db, 'inventoryMovements'), where('itemId', '==', itemId)))
+  ]);
   
   const stockByLocation: { [location: string]: number } = {};
 
@@ -253,7 +257,7 @@ export async function recalculateStockForItem(itemId: string): Promise<void> {
   txSnap.docs.forEach(doc => {
     const tx = doc.data() as Transaction;
     if (!tx.enabled || !tx.items) return;
-    if ((tx as any).status === 'cancelled') return;
+    if (tx.status === 'cancelled') return;
 
     tx.items.forEach(item => {
       if (item.id === itemId) {
@@ -261,8 +265,8 @@ export async function recalculateStockForItem(itemId: string): Promise<void> {
         if (!stockByLocation[loc]) stockByLocation[loc] = 0;
         
         const effect = getInventoryEffect(tx.type);
-        if (effect === 'in') stockByLocation[loc] += item.quantity;
-        else if (effect === 'out') stockByLocation[loc] -= item.quantity;
+        if (effect === 'in') stockByLocation[loc] += Number(item.quantity) || 0;
+        else if (effect === 'out') stockByLocation[loc] -= Number(item.quantity) || 0;
       }
     });
   });
@@ -288,7 +292,7 @@ export async function recalculateStockForItem(itemId: string): Promise<void> {
 export async function recalculateAllStocks(): Promise<{ updatedItems: number }> {
     if (!db) throw new Error("Firebase not configured.");
     
-    // Fetch everything once
+    // Fetch everything once to be efficient
     const [itemsSnap, txSnap, movSnap] = await Promise.all([
         getDocs(collection(db, 'inventory')),
         getDocs(collection(db, 'transactions')),
@@ -302,24 +306,24 @@ export async function recalculateAllStocks(): Promise<{ updatedItems: number }> 
         const itemId = itemDoc.id;
         const stockByLocation: { [location: string]: number } = {};
 
-        // Transactions
+        // Transactions pass
         txSnap.docs.forEach(tDoc => {
             const tx = tDoc.data() as Transaction;
             if (!tx.enabled || !tx.items) return;
-            if ((tx as any).status === 'cancelled') return;
+            if (tx.status === 'cancelled') return;
 
             tx.items.forEach(it => {
                 if (it.id === itemId) {
                     const loc = it.location || 'default';
                     if (!stockByLocation[loc]) stockByLocation[loc] = 0;
                     const effect = getInventoryEffect(tx.type);
-                    if (effect === 'in') stockByLocation[loc] += it.quantity;
-                    else if (effect === 'out') stockByLocation[loc] -= it.quantity;
+                    if (effect === 'in') stockByLocation[loc] += Number(it.quantity) || 0;
+                    else if (effect === 'out') stockByLocation[loc] -= Number(it.quantity) || 0;
                 }
             });
         });
 
-        // Adjustments
+        // Adjustments pass
         movSnap.docs.forEach(mDoc => {
             const mov = mDoc.data() as InventoryMovement;
             if (mov.itemId === itemId) {
@@ -361,7 +365,7 @@ export function subscribeToStockAdjustments(
       return {
         id: doc.id,
         ...data,
-        date: (data.date as Timestamp)?.toDate ? (data.date as Timestamp).toDate().toISOString() : new Date().toISOString(),
+        date: (data.date as Timestamp)?.toDate ? (data.date as Timestamp).toDate().toISOString() : data.date,
       } as InventoryMovement;
     });
     movements.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
