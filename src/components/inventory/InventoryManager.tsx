@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { InventoryItem, InventoryCategory, Party, AppSettings } from '@/types';
+import type { InventoryItem, InventoryCategory, Party, AppSettings, Transaction } from '@/types';
 import { 
   subscribeToInventoryItems, 
   subscribeToInventoryCategories, 
@@ -14,6 +13,7 @@ import {
   recalculateAllStocks 
 } from '@/services/inventoryService';
 import { subscribeToParties } from '@/services/partyService';
+import { subscribeToAllTransactions } from '@/services/transactionService';
 import { uploadImage } from '@/services/storageService';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -32,7 +32,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, AlertTriangle, SlidersHorizontal, Loader2, X, Grid, List, Boxes, DollarSign, ShoppingCart, Settings } from 'lucide-react';
+import { Archive, Plus, Edit, Trash2, MoreVertical, Search, Package, ImageIcon, Camera, Upload, ChevronsUpDown, Check, RefreshCcw, AlertTriangle, SlidersHorizontal, Loader2, X, Grid, List, Boxes, DollarSign, ShoppingCart, Settings, FileText, History, Download } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -74,6 +74,66 @@ const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string; 
         </CardContent>
     </Card>
 );
+
+const LastPurchaseDialog = ({ item, open, onOpenChange, transactions, parties }: { item: InventoryItem | null, open: boolean, onOpenChange: (open: boolean) => void, transactions: Transaction[], parties: Party[] }) => {
+    const lastPurchase = useMemo(() => {
+        if (!item) return null;
+        return transactions
+            .filter(t => (t.type === 'purchase' || t.type === 'credit_purchase') && t.enabled && t.items?.some(i => i.id === item.id))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    }, [item, transactions]);
+
+    const supplierName = useMemo(() => {
+        if (!lastPurchase?.partyId) return 'Unknown Supplier';
+        return parties.find(p => p.id === lastPurchase.partyId)?.name || 'Unknown Supplier';
+    }, [lastPurchase, parties]);
+
+    if (!item) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Last Purchase: {item.name}</DialogTitle>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {lastPurchase ? (
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="space-y-1">
+                                <Label className="text-muted-foreground">Date</Label>
+                                <p className="font-bold">{formatDate(lastPurchase.date)}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-muted-foreground">Supplier</Label>
+                                <p className="font-bold">{supplierName}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-muted-foreground">Cost Price</Label>
+                                <p className="font-bold text-red-600">{formatAmount(lastPurchase.items?.find(i => i.id === item.id)?.price || 0)}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-muted-foreground">Quantity</Label>
+                                <p className="font-bold">{lastPurchase.items?.find(i => i.id === item.id)?.quantity || 0}</p>
+                            </div>
+                            <div className="col-span-2 space-y-1 pt-2 border-t">
+                                <Label className="text-muted-foreground">Transaction Details</Label>
+                                <p className="italic">{lastPurchase.description}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-6 text-muted-foreground">
+                            <History className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                            <p>No purchase records found for this item.</p>
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button>Close</Button></DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
 
 export const StockAdjustmentDialog = ({ item, open, onOpenChange, appSettings }: { item: InventoryItem | null; open: boolean; onOpenChange: (open: boolean) => void; appSettings: AppSettings | null; }) => {
     const [adjustmentType, setAdjustmentType] = useState<'addition' | 'subtraction' | 'transfer'>('addition');
@@ -328,17 +388,20 @@ export default function InventoryManager() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
+  const [viewingLastPurchaseItem, setViewingLastPurchaseItem] = useState<InventoryItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isRecalculating, setIsRecalculating] = useState(false);
   
   const { toast } = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit');
 
@@ -347,9 +410,10 @@ export default function InventoryManager() {
     const unsubItems = subscribeToInventoryItems(setItems, (err) => toast({ variant: 'destructive', title: 'Error', description: err.message }));
     const unsubCats = subscribeToInventoryCategories(setCategories, console.error);
     const unsubParties = subscribeToParties(setParties, console.error);
+    const unsubTransactions = subscribeToAllTransactions(setTransactions, console.error);
     getAppSettings().then(setAppSettings);
     setLoading(false);
-    return () => { unsubItems(); unsubCats(); unsubParties(); };
+    return () => { unsubItems(); unsubCats(); unsubParties(); unsubTransactions(); };
   }, [toast]);
   
   useEffect(() => {
@@ -361,6 +425,25 @@ export default function InventoryManager() {
       }
     }
   }, [editId, items]);
+
+  const handleDownloadImage = async (url: string, name: string) => {
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `${name.replace(/\s+/g, '_')}_image.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        toast({ title: 'Download Started' });
+    } catch (error) {
+        console.error("Download failed", error);
+        toast({ variant: 'destructive', title: 'Download Failed' });
+    }
+  };
 
   const handleSaveItem = async (data: ItemFormValues, item: InventoryItem | null, imageFile: File | null) => {
     try {
@@ -430,6 +513,14 @@ export default function InventoryManager() {
         open={!!adjustingItem} 
         onOpenChange={() => setAdjustingItem(null)} 
         appSettings={appSettings} 
+      />
+
+      <LastPurchaseDialog
+        item={viewingLastPurchaseItem}
+        open={!!viewingLastPurchaseItem}
+        onOpenChange={() => setViewingLastPurchaseItem(null)}
+        transactions={transactions}
+        parties={parties}
       />
 
       {/* Top Summary Cards */}
@@ -506,13 +597,30 @@ export default function InventoryManager() {
                                     <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full shadow-lg bg-white/90 backdrop-blur-sm"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setAdjustingItem(item)}><SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust Stock</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => recalculateStockForItem(item.id)}><RefreshCcw className="mr-2 h-4 w-4" /> Sync Stock</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => router.push(`/reports/stock-in-out?productName=${encodeURIComponent(item.name)}`)}>
+                                        <FileText className="mr-2 h-4 w-4" /> View Report
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setViewingLastPurchaseItem(item)}>
+                                        <History className="mr-2 h-4 w-4" /> Last Purchase
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setAdjustingItem(item)}>
+                                        <SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust Stock
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => recalculateStockForItem(item.id)}>
+                                        <RefreshCcw className="mr-2 h-4 w-4" /> Recalculate Stock
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => item.imageUrl && handleDownloadImage(item.imageUrl, item.name)} disabled={!item.imageUrl}>
+                                        <Download className="mr-2 h-4 w-4" /> Download Image
+                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}>
+                                        <Edit className="mr-2 h-4 w-4" /> Edit Item
+                                    </DropdownMenuItem>
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive">
+                                                <Trash2 className="mr-2 h-4 w-4" /> Delete Item
+                                            </DropdownMenuItem>
                                         </AlertDialogTrigger>
                                         <AlertDialogContent>
                                             <AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescriptionComponent>This will remove the product and all associated history.</AlertDialogDescriptionComponent></AlertDialogHeader>
@@ -601,10 +709,28 @@ export default function InventoryManager() {
                                           <DropdownMenu>
                                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                               <DropdownMenuContent align="end">
-                                                  <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                                  <DropdownMenuItem onClick={() => setAdjustingItem(item)}><SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => router.push(`/reports/stock-in-out?productName=${encodeURIComponent(item.name)}`)}>
+                                                      <FileText className="mr-2 h-4 w-4" /> View Report
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => setViewingLastPurchaseItem(item)}>
+                                                      <History className="mr-2 h-4 w-4" /> Last Purchase
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => setAdjustingItem(item)}>
+                                                      <SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust Stock
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => recalculateStockForItem(item.id)}>
+                                                      <RefreshCcw className="mr-2 h-4 w-4" /> Recalculate Stock
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => item.imageUrl && handleDownloadImage(item.imageUrl, item.name)} disabled={!item.imageUrl}>
+                                                      <Download className="mr-2 h-4 w-4" /> Download Image
+                                                  </DropdownMenuItem>
                                                   <DropdownMenuSeparator />
-                                                  <DropdownMenuItem onClick={() => deleteInventoryItem(item.id)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}>
+                                                      <Edit className="mr-2 h-4 w-4" /> Edit Item
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => deleteInventoryItem(item.id)} className="text-destructive">
+                                                      <Trash2 className="mr-2 h-4 w-4" /> Delete Item
+                                                  </DropdownMenuItem>
                                               </DropdownMenuContent>
                                           </DropdownMenu>
                                       </TableCell>
