@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
@@ -143,10 +141,13 @@ const CreatePurchaseFromPODialog = ({ po, onOpenChange, accounts, parties, produ
         }
         setIsSaving(true);
         try {
+            const finalItems = [];
+
             // First, handle inventory updates and creation
             for (const item of data.items) {
+                let actualId = item.productId;
                 if (item.isNew && item.productId?.startsWith('new-')) { // Check if it's a truly new item
-                    await addInventoryItem({
+                    const newId = await addInventoryItem({
                         name: item.name,
                         sku: `NEW-${Date.now()}`,
                         category: 'Uncategorized',
@@ -156,26 +157,20 @@ const CreatePurchaseFromPODialog = ({ po, onOpenChange, accounts, parties, produ
                         quantity: 0, // Will be updated by transaction
                         minStockLevel: 10,
                     });
+                    actualId = newId;
                 } else if (item.productId) {
                     // ONLY update cost price on purchase
                     await updateInventoryItem(item.productId, { cost: item.price });
                 }
-            }
 
-            // Find product IDs for new items if they were created
-            const allProductsSnap = await getDocs(collection(db, 'inventory'));
-            const allProducts = allProductsSnap.docs.map(d => ({id: d.id, ...d.data()})) as Product[];
-            
-            const transactionItems = data.items.map(item => {
-                const product = allProducts.find(p => p.name === item.name);
-                return {
-                    id: product?.id || 'unknown',
+                finalItems.push({
+                    id: actualId || 'unknown',
                     name: item.name,
                     quantity: item.quantity,
                     price: item.price,
                     location: item.location,
-                }
-            });
+                });
+            }
 
             // Then, create the transaction
             const purchaseTx = {
@@ -186,8 +181,9 @@ const CreatePurchaseFromPODialog = ({ po, onOpenChange, accounts, parties, produ
                 amount: totalAmount,
                 partyId: party.id,
                 accountId: data.purchaseType === 'purchase' ? data.accountId : undefined,
-                items: transactionItems,
+                items: finalItems,
                 via: via,
+                enabled: true, // Crucial for reports
             };
 
             await addTransaction(purchaseTx as any);

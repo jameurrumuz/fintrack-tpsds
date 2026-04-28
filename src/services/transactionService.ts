@@ -29,7 +29,6 @@ export function subscribeToAllTransactions(
       } as Transaction;
     });
 
-    // Default sorting for general lists: Newest First
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -67,8 +66,6 @@ export function subscribeToTransactionsForParty(
             } as Transaction;
         });
 
-        // Sorting by newest first for initial stream. 
-        // Note: PartyLedger component handles its own "Oldest at top" sorting in useMemo as per RULES.md
         transactions.sort((a, b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
@@ -90,7 +87,6 @@ export function subscribeToTransactionsForPartyIds(
   const collectionRef = getTransactionsCollection();
   if (!collectionRef || partyIds.length === 0) return () => {};
 
-  // Firestore "in" queries are limited to 10 items.
   const q = query(collectionRef, where('partyId', 'in', partyIds.slice(0, 10)));
 
   return onSnapshot(q, (snapshot) => {
