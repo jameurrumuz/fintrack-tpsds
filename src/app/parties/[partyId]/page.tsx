@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
@@ -7,7 +6,7 @@ import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Transaction, Party, Account, AppSettings } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
-import { subscribeToTransactionsForParty, addTransaction, updateTransaction, toggleTransaction } from '@/services/transactionService';
+import { subscribeToTransactionsForParty, addTransaction as addTxService, updateTransaction, toggleTransaction } from '@/services/transactionService';
 import { getAppSettings } from '@/services/settingsService';
 import { subscribeToParties } from '@/services/partyService';
 import { Button } from '@/components/ui/button';
@@ -105,10 +104,10 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
                                         setOpen(false);
                                     }}
                                 >
-                                    <CheckIcon className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
+                                    <Check className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span className="font-medium">{party.name}</span>
-                                        <span className="text-xs text-muted-foreground">{party.phone}</span>
+                                        <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
                                     </div>
                                 </CommandItem>
                             ))}
@@ -234,6 +233,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         grouped[t.date].push(t); 
     });
     
+    // Sort oldest date at top as per rules
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
