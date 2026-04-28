@@ -1,9 +1,8 @@
-
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { getDoc, doc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Transaction, Party, Account, AppSettings } from '@/types';
 import { subscribeToAccounts } from '@/services/accountService';
@@ -22,14 +21,14 @@ import {
   Loader2, ArrowLeft, Printer, Banknote, ArrowDown, ArrowUp, Trash2, Edit, 
   MoreVertical, Plus, ShoppingCart, Wallet, Receipt, HandCoins, ArrowDownToLine, 
   Share2, Landmark, FileText, History, Search, Save, X, ChevronDown, ChevronUp, 
-  Repeat, Check, ChevronsUpDown, MinusCircle 
+  Repeat, Check, ChevronsUpDown, MinusCircle, BarChart2, Package, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -69,7 +68,6 @@ const partyTransactionSchema = z.object({
 
 type FormValues = z.infer<typeof partyTransactionSchema>;
 
-// --- Party Selector Component ---
 const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], currentPartyId: string }) => {
     const router = useRouter();
     const [open, setOpen] = useState(false);
@@ -197,7 +195,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
   const { groupedTransactions, currentBalance, openingBalance, analysis, stats } = useMemo(() => {
     const enabledTxs = transactions.filter(t => t.enabled);
     
-    // Sort oldest to newest for consistent running balance calculation
     const sortedTimeline = [...enabledTxs].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -215,7 +212,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         const effect = getPartyBalanceEffect(t);
         running += effect;
         
-        // Sum total Give/Receive for analysis
         if (['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type)) totalReceive += t.amount;
         if (['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type)) totalGive += t.amount;
         
@@ -231,7 +227,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         return t.date >= filters.dateFrom && t.date <= filters.dateTo;
     });
 
-    // Grouping for table display (Oldest at top)
     const grouped: { [key: string]: any[] } = {};
     filtered.forEach(t => { 
         if(!grouped[t.date]) grouped[t.date] = []; 
@@ -548,4 +543,3 @@ export default function PartyLedgerPageWrapper(props: { params: Promise<{ partyI
     </Suspense>
   );
 }
-
