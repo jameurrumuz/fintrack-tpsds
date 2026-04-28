@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -166,6 +166,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     const withRunning = sortedTimeline.map(t => {
         const effect = getPartyBalanceEffect(t);
         running += effect;
+        // Total calculations for analysis tab (Credits - Debits logic)
         if (['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type)) totalReceive += t.amount;
         if (['give', 'credit_sale', 'purchase_return', 'credit_give', 'spent', 'purchase'].includes(t.type)) totalGive += t.amount;
         return { ...t, runningBalance: running };
@@ -221,7 +222,8 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
   useEffect(() => {
     if (party && businessProfile && isHydrated) {
-        QRCode.toDataURL(`Party: ${party.name}\nBalance: ${formatAmount(currentBalance)}\nFrom: ${businessProfile.name}`, { width: 100, margin: 1, errorCorrectionLevel: 'H' }, (err, url) => {
+        const qrText = `Party: ${party.name}\nBalance: ${formatAmount(currentBalance)}\nFrom: ${businessProfile.name}`;
+        QRCode.toDataURL(qrText, { width: 100, margin: 1, errorCorrectionLevel: 'H' }, (err, url) => {
             if (!err) setQrCodeDataUrl(url);
         });
     }
@@ -270,7 +272,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
     try {
       await toggleTransaction(id, false);
       toast({ title: 'Transaction Disabled', description: 'The transaction has been moved to the activity log.' });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to disable transaction:', error);
       toast({ variant: 'destructive', title: 'Error', description: 'Could not disable transaction.' });
     }
@@ -365,7 +367,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                           <React.Fragment key={date}>
                             <TableRow className="bg-primary/5"><TableCell colSpan={6} className="py-1 px-3 font-bold text-[10px] text-primary uppercase">{formatDate(date)}</TableCell></TableRow>
                             {txs.map((t) => {
-                              const effect = getPartyBalanceEffect(t);
                               const isDebit = ['give', 'credit_sale', 'spent', 'purchase', 'purchase_return', 'credit_give'].includes(t.type);
                               const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income', 'sale', 'income'].includes(t.type);
                               const accName = accounts.find(a => a.id === t.accountId)?.name || t.payments?.map(p => accounts.find(a => a.id === p.accountId)?.name).join(', ') || '';
