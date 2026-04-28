@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -89,7 +89,7 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[300px] p-0" align="start">
+            <PopoverContent className="w-[320px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search party by name or phone..." />
                     <CommandList>
@@ -105,6 +105,64 @@ const PartySearchSwitcher = ({ parties, currentPartyId }: { parties: Party[], cu
                                     }}
                                 >
                                     <Check className={cn("mr-2 h-4 w-4", currentPartyId === party.id ? "opacity-100" : "opacity-0")} />
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{party.name}</span>
+                                        <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
+const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party..." }: { parties: Party[], value: string, onChange: (value: string) => void, placeholder?: string }) => {
+    const [open, setOpen] = useState(false);
+    const selectedParty = parties.find(p => p.id === value);
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between font-normal h-10"
+                >
+                    {value && selectedParty ? selectedParty.name : placeholder}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[320px] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Search party..." />
+                    <CommandList>
+                        <CommandEmpty>Not found.</CommandEmpty>
+                        <CommandGroup>
+                            <CommandItem
+                                key="none-party"
+                                value="none"
+                                onSelect={() => {
+                                    onChange("none");
+                                    setOpen(false);
+                                }}
+                            >
+                                <Check className={cn("mr-2 h-4 w-4", value === "none" ? "opacity-100" : "opacity-0")} />
+                                None
+                            </CommandItem>
+                            {parties.map((party) => (
+                                <CommandItem
+                                    key={party.id}
+                                    value={`${party.name} ${party.phone}`}
+                                    onSelect={() => {
+                                        onChange(party.id);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check className={cn("mr-2 h-4 w-4", value === party.id ? "opacity-100" : "opacity-0")} />
                                     <div className="flex flex-col">
                                         <span className="font-medium">{party.name}</span>
                                         <span className="text-xs text-muted-foreground">{party.phone || 'No phone'}</span>
@@ -233,7 +291,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         grouped[t.date].push(t); 
     });
     
-    // Sort oldest date at top as per rules
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
@@ -439,9 +496,9 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
+                                                            <AlertDialogDescriptionComponent>
                                                                 This will disable the transaction and it will no longer affect balances. You can restore it from the Activity Log.
-                                                            </AlertDialogDescription>
+                                                            </AlertDialogDescriptionComponent>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>

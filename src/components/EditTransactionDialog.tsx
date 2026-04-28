@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -64,7 +63,7 @@ const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[350px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search party..." />
                     <CommandList>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -97,7 +96,7 @@ const ItemCombobox = ({ items, onSelect, className }: { items: InventoryItem[], 
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[320px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search item..." />
                     <CommandList>
@@ -143,7 +142,7 @@ const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a party
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[350px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search party..." />
                     <CommandList>
@@ -430,7 +429,7 @@ export default function PartyTransactionEditDialog({ transaction, parties, accou
             </div>
 
             <DialogFooter className="pt-4">
-              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
               <Button type="submit">Save Changes</Button>
             </DialogFooter>
           </form>
