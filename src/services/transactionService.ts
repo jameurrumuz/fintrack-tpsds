@@ -34,7 +34,7 @@ export function subscribeToAllTransactions(
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA;
+        if (dateA !== dateB) return dateB - dateA; // Main history shows newest first
         
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -68,13 +68,14 @@ export function subscribeToTransactionsForParty(
             } as Transaction;
         });
 
+        // AS PER RULES.md: Oldest transactions at top, newest at bottom for Party Ledger
         transactions.sort((a, b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
-            if (dateA !== dateB) return dateB - dateA;
+            if (dateA !== dateB) return dateA - dateB;
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeB - timeA;
+            return timeA - timeB;
         });
 
         onUpdate(transactions);
@@ -180,7 +181,17 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           ]);
           
           if (partySnap.exists()) {
-              party = { id: partySnap.id, ...partySnap.data() } as Party;
+              const partyData = partySnap.data();
+              // SERIALIZE PARTY DATA: Convert all Timestamps to ISO strings for Server Function compatibility
+              party = { 
+                id: partySnap.id, 
+                ...partyData,
+                createdAt: partyData.createdAt && (partyData.createdAt as any).toDate ? (partyData.createdAt as any).toDate().toISOString() : partyData.createdAt,
+                updatedAt: partyData.updatedAt && (partyData.updatedAt as any).toDate ? (partyData.updatedAt as any).toDate().toISOString() : partyData.updatedAt,
+                lastContacted: partyData.lastContacted && (partyData.lastContacted as any).toDate ? (partyData.lastContacted as any).toDate().toISOString() : partyData.lastContacted,
+                lastSeen: partyData.lastSeen && (partyData.lastSeen as any).toDate ? (partyData.lastSeen as any).toDate().toISOString() : partyData.lastSeen,
+              } as Party;
+
               previousDue = txsSnap.docs.reduce((sum, d) => {
                   const tx = d.data() as Transaction;
                   return tx.enabled ? sum + getPartyBalanceEffect(tx, false) : sum;
@@ -212,7 +223,13 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
                         (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
       
-      const savedTx = { ...cleanData, id: docRef.id } as any;
+      // Serialize Transaction for Server Function
+      const savedTx = { 
+        ...cleanData, 
+        id: docRef.id,
+        createdAt: new Date().toISOString() // Convert from serverTimestamp to current ISO
+      } as any;
+
       handleSmsNotification(savedTx, party, paidAmount, previousDue).catch(err => {
           console.error("SMS notification failed in addTransaction:", err);
       });
