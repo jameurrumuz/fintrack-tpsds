@@ -1,3 +1,4 @@
+
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -9,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { format as formatFns, parseISO, isValid } from 'date-fns';
 import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined, formatAmount } from '@/lib/utils';
+import { handleSmsNotification } from './possmsnotificationService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
 
@@ -166,6 +168,29 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     transactionData.payments.forEach(p => involvedAccounts.add(p.accountId));
   }
 
+  // Pre-calculate previous due if SMS is needed
+  let previousDue = 0;
+  let party: Party | null = null;
+  if (transactionData.sendSms && transactionData.partyId) {
+      try {
+          const partyRef = doc(db, 'parties', transactionData.partyId);
+          const [partySnap, txsSnap] = await Promise.all([
+              getDoc(partyRef),
+              getDocs(query(collection(db, 'transactions'), where('partyId', '==', transactionData.partyId)))
+          ]);
+          
+          if (partySnap.exists()) {
+              party = { id: partySnap.id, ...partySnap.data() } as Party;
+              previousDue = txsSnap.docs.reduce((sum, d) => {
+                  const tx = d.data() as Transaction;
+                  return tx.enabled ? sum + getPartyBalanceEffect(tx, false) : sum;
+              }, 0);
+          }
+      } catch (e) {
+          console.error("Error fetching data for SMS:", e);
+      }
+  }
+
   const cleanData = cleanUndefined({
     ...transactionData,
     involvedAccounts: Array.from(involvedAccounts),
@@ -181,6 +206,17 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
   involvedAccounts.forEach(accId => {
     recalculateAccountBalance(accId);
   });
+
+  // Trigger SMS notification if requested
+  if (transactionData.sendSms && party) {
+      const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
+                        (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
+      
+      const savedTx = { ...cleanData, id: docRef.id } as any;
+      handleSmsNotification(savedTx, party, paidAmount, previousDue).catch(err => {
+          console.error("SMS notification failed in addTransaction:", err);
+      });
+  }
 
   return docRef.id;
 }
@@ -409,10 +445,3 @@ export async function createTransaction(data: any) {
 export async function generateInvoiceNumber(): Promise<string> {
     return `INV-${Date.now()}`;
 }
-
-export async function handleSmsNotification(transaction: any, party: any, paidAmount: number, previousDue: number) {
-    return;
-}
-
-export async function deleteTransactionByDetails(details: any) {}
-export async function updateTransactionByDetails(oldDetails: any, newDetails: any) {}

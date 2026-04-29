@@ -196,6 +196,7 @@ function ReceiveTransactionPage() {
                 items: itemsToSave,
                 via: via,
                 enabled: true,
+                sendSms: sendSmsOnSave
             });
             
             toast({ title: 'Success', description: 'Transaction recorded.' });

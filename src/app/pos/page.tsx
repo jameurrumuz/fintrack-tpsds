@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -15,7 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, Save, Users, Loader2, ArrowLeft, Printer, Share2, ShoppingCart, User, Building, Phone, MapPin, ChevronsUpDown, Check, Calendar as CalendarIcon, Minus, ImageIcon, Camera, Upload, Truck, DollarSign, ScanLine, Pencil, Copy, Users2, CreditCard, Search, Package, Settings, X, RefreshCcw } from 'lucide-react';
 import { subscribeToParties, addParty } from '@/services/partyService';
 import { subscribeToInventoryItems, addInventoryItem, recalculateStockForItem } from '@/services/inventoryService';
-import { addTransaction, subscribeToAllTransactions, handleSmsNotification } from '@/services/transactionService';
+import { addTransaction, subscribeToAllTransactions } from '@/services/transactionService';
+import { handleSmsNotification } from '@/services/possmsnotificationService';
 import { subscribeToAccounts } from '@/services/accountService';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -429,7 +431,10 @@ function PosPage() {
           sendSms: sendSmsOnSave,
       };
 
-      const resultId = await addTransaction(txData);
+      // Accurate SMS handling - The central addTransaction handles single SMS if passed.
+      // But POS can create multiple payments (sale + separate payments).
+      // We pass sendSms: false to addTransaction and call manual combined SMS if needed.
+      const resultId = await addTransaction({...txData, sendSms: false});
       
       if (sendSmsOnSave && currentParty) {
           const savedTransaction = { ...txData, id: resultId };
