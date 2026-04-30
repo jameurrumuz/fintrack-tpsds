@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -34,7 +33,7 @@ export function subscribeToAllTransactions(
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA; // Main history shows newest first
+        if (dateA !== dateB) return dateB - dateA; 
         
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -169,7 +168,6 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     transactionData.payments.forEach(p => involvedAccounts.add(p.accountId));
   }
 
-  // Pre-calculate previous due if SMS is needed
   let previousDue = 0;
   let party: Party | null = null;
   if (transactionData.sendSms && transactionData.partyId) {
@@ -182,7 +180,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           
           if (partySnap.exists()) {
               const partyData = partySnap.data();
-              // SERIALIZE PARTY DATA: Convert all Timestamps to ISO strings for Server Function compatibility
+              // Serializing party data for server function
               party = { 
                 id: partySnap.id, 
                 ...partyData,
@@ -218,16 +216,14 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     recalculateAccountBalance(accId);
   });
 
-  // Trigger SMS notification if requested
   if (transactionData.sendSms && party) {
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
                         (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
       
-      // Serialize Transaction for Server Function
       const savedTx = { 
         ...cleanData, 
         id: docRef.id,
-        createdAt: new Date().toISOString() // Convert from serverTimestamp to current ISO
+        createdAt: new Date().toISOString()
       } as any;
 
       handleSmsNotification(savedTx, party, paidAmount, previousDue).catch(err => {
@@ -433,7 +429,6 @@ export async function recalculateBalancesFromTransaction(startDate?: string): Pr
 }
 
 export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransactions: number; updatedItems: number }> {
-    if (!db) throw new Error("Firebase not configured.");
     return { updatedTransactions: 0, updatedItems: 0 };
 }
 

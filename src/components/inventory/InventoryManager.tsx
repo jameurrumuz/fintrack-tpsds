@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -65,7 +64,6 @@ const itemSchema = z.object({
 });
 type ItemFormValues = z.infer<typeof itemSchema>;
 
-// Summary Card Component
 const SummaryCard = ({ title, value, icon: Icon, colorClass }: { title: string; value: string | number; icon: any; colorClass: string }) => (
     <Card className="shadow-sm border-0">
         <CardContent className="p-4 flex flex-col gap-1">
@@ -404,6 +402,8 @@ export default function InventoryManager() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [partyToDelete, setPartyToDelete] = useState<InventoryItem | null>(null);
+  const [deleteChallenge, setDeleteChallenge] = useState({ num1: 0, num2: 0, answer: '' });
   
   const { toast } = useToast();
   const router = useRouter();
@@ -482,6 +482,26 @@ export default function InventoryManager() {
           setIsRecalculating(false);
       }
   };
+  
+  const handleDeleteItem = async () => {
+    if (!partyToDelete) return;
+    try {
+      await deleteInventoryItem(partyToDelete.id);
+      toast({ title: 'Success', description: `Product "${partyToDelete.name}" deleted.` });
+      setPartyToDelete(null);
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not delete product.' });
+    }
+  }
+
+  const openDeleteDialog = (item: InventoryItem) => {
+    setPartyToDelete(item);
+    setDeleteChallenge({
+        num1: Math.floor(Math.random() * 10) + 1,
+        num2: Math.floor(Math.random() * 10) + 1,
+        answer: ''
+    });
+  };
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
@@ -527,6 +547,38 @@ export default function InventoryManager() {
         transactions={transactions}
         parties={parties}
       />
+
+      {partyToDelete && (
+        <AlertDialog open={!!partyToDelete} onOpenChange={(open) => !open && setPartyToDelete(null)}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure you want to delete {partyToDelete?.name}?</AlertDialogTitle>
+                  <AlertDialogDescriptionComponent>
+                      This action cannot be undone and will permanently delete this product. To confirm, please solve:
+                  </AlertDialogDescriptionComponent>
+              </AlertDialogHeader>
+              <div className="my-2 p-4 bg-muted rounded-md text-center">
+                  <span className="text-lg font-mono">{deleteChallenge.num1} + {deleteChallenge.num2} = ?</span>
+                  <Input 
+                      value={deleteChallenge.answer}
+                      onChange={(e) => setDeleteChallenge({...deleteChallenge, answer: e.target.value})}
+                      className="mt-2 text-center"
+                      autoFocus
+                  />
+              </div>
+              <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                      onClick={handleDeleteItem}
+                      disabled={parseInt(deleteChallenge.answer) !== (deleteChallenge.num1 + deleteChallenge.num2)}
+                      className={cn(buttonVariants({ variant: 'destructive' }))}
+                  >
+                      Delete
+                  </AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
 
       {/* Top Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -621,20 +673,9 @@ export default function InventoryManager() {
                                     <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}>
                                         <Edit className="mr-2 h-4 w-4" /> Edit Item
                                     </DropdownMenuItem>
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive">
-                                                <Trash2 className="mr-2 h-4 w-4" /> Delete Item
-                                            </DropdownMenuItem>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader><AlertDialogTitle>Delete {item.name}?</AlertDialogTitle><AlertDialogDescriptionComponent>This will remove the product and all associated history.</AlertDialogDescriptionComponent></AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => deleteInventoryItem(item.id)} className={cn(buttonVariants({ variant: 'destructive' }))}>Delete</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
+                                    <DropdownMenuItem onSelect={e => { e.preventDefault(); openDeleteDialog(item); }} className="text-destructive">
+                                        <Trash2 className="mr-2 h-4 w-4" /> Delete Item
+                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -733,7 +774,7 @@ export default function InventoryManager() {
                                                   <DropdownMenuItem onClick={() => { setEditingItem(item); setIsItemDialogOpen(true); }}>
                                                       <Edit className="mr-2 h-4 w-4" /> Edit Item
                                                   </DropdownMenuItem>
-                                                  <DropdownMenuItem onClick={() => deleteInventoryItem(item.id)} className="text-destructive">
+                                                  <DropdownMenuItem onSelect={e => { e.preventDefault(); openDeleteDialog(item); }} className="text-destructive">
                                                       <Trash2 className="mr-2 h-4 w-4" /> Delete Item
                                                   </DropdownMenuItem>
                                               </DropdownMenuContent>

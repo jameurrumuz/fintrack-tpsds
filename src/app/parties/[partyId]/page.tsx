@@ -211,7 +211,6 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
 
     const withRunning = sortedTimeline.map(t => {
         const effect = getPartyBalanceEffect(t);
-        // Rules: Cash Sale, Income, Expense don't affect ledger balance
         const shouldAffectBalance = !['sale', 'purchase', 'income', 'spent'].includes(t.type);
         if (shouldAffectBalance) {
             running += effect;
@@ -238,7 +237,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         grouped[t.date].push(t); 
     });
     
-    // Final grouping sorted ASCENDING (Oldest to Newest) as per RULES.md
+    // AS PER RULES.MD: Oldest to Newest sorting for the ledger
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
