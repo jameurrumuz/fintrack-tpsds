@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -150,7 +149,6 @@ function PosPage() {
   const [tabs, setTabs] = useState<SaleTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isRecalculatingStock, setIsRecalculatingStock] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isItemFormOpen, setIsItemFormOpen] = useState(false);
   const [isNewPartyDialogOpen, setIsNewPartyDialogOpen] = useState(false);
@@ -229,10 +227,10 @@ function PosPage() {
           createNewTab(party.id, party.name);
         }
       }
-    } else if (tabs.length === 0 && !loading) {
+    } else if (tabs.length === 0 && !loading && appSettings) {
         createNewTab();
     }
-  }, [partyIdFromQuery, parties, loading, createNewTab, tabs]);
+  }, [partyIdFromQuery, parties, loading, createNewTab, tabs, appSettings]);
 
   const searchableItems = useMemo(() => {
     const incomeServices = (appSettings?.customerServices || [])
@@ -255,10 +253,6 @@ function PosPage() {
         ('sku' in item && item.sku && item.sku.toLowerCase().includes(lowercasedQuery))
     );
   }, [searchQuery, searchableItems]);
-
-  const deliveryPersonnel = useMemo(() => {
-    return parties.filter(p => p.partyType === 'Delivery');
-  }, [parties]);
 
   const handleAddItemToCart = useCallback((item: InventoryItem | (CustomerService & { isService?: boolean })) => {
     updateActiveTabState(prev => {
@@ -373,7 +367,13 @@ function PosPage() {
     }));
   };
 
-  if (!activeTabState) return null;
+  if (loading || !appSettings || accounts.length === 0) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary h-12 w-12" /></div>;
+  }
+
+  if (!activeTabState) {
+    return <div className="flex justify-center items-center h-screen font-semibold text-muted-foreground">Loading session...</div>;
+  }
 
   const { cart: activeCart, pricingTier, selectedPartyId, billDate, deliveryById, selectedVia, notes, discount, deliveryCharge, deliveryChargePaidBy, payments, sendSmsOnSave, saleType } = activeTabState;
   
@@ -733,13 +733,5 @@ function PosPage() {
 }
 
 export default function PosPageWrapper() {
-  return (
-    <Suspense fallback={
-        <div className="flex justify-center items-center h-screen">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-    }>
-        <PosPage />
-    </Suspense>
-  );
+  return <PosPage />;
 }
