@@ -1,3 +1,4 @@
+
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -180,14 +181,14 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           
           if (partySnap.exists()) {
               const partyData = partySnap.data();
-              // Serializing party data for server function
+              // Serializing party data for server function: Convert Timestamps to ISO strings
               party = { 
                 id: partySnap.id, 
                 ...partyData,
-                createdAt: partyData.createdAt && (partyData.createdAt as any).toDate ? (partyData.createdAt as any).toDate().toISOString() : partyData.createdAt,
-                updatedAt: partyData.updatedAt && (partyData.updatedAt as any).toDate ? (partyData.updatedAt as any).toDate().toISOString() : partyData.updatedAt,
-                lastContacted: partyData.lastContacted && (partyData.lastContacted as any).toDate ? (partyData.lastContacted as any).toDate().toISOString() : partyData.lastContacted,
-                lastSeen: partyData.lastSeen && (partyData.lastSeen as any).toDate ? (partyData.lastSeen as any).toDate().toISOString() : partyData.lastSeen,
+                createdAt: partyData.createdAt?.toDate ? partyData.createdAt.toDate().toISOString() : partyData.createdAt,
+                updatedAt: partyData.updatedAt?.toDate ? partyData.updatedAt.toDate().toISOString() : partyData.updatedAt,
+                lastContacted: partyData.lastContacted?.toDate ? partyData.lastContacted.toDate().toISOString() : partyData.lastContacted,
+                lastSeen: partyData.lastSeen?.toDate ? partyData.lastSeen.toDate().toISOString() : partyData.lastSeen,
               } as Party;
 
               previousDue = txsSnap.docs.reduce((sum, d) => {
@@ -456,4 +457,26 @@ export async function createTransaction(data: any) {
 
 export async function generateInvoiceNumber(): Promise<string> {
     return `INV-${Date.now()}`;
+}
+
+export async function deleteTransactionByDetails(details: string) {
+    if (!db) return;
+    const q = query(collection(db, 'transactions'), where('description', '==', details));
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+}
+
+export async function updateTransactionByDetails(oldDetails: string, updates: Partial<Transaction>) {
+    if (!db) return;
+    const q = query(collection(db, 'transactions'), where('description', '==', oldDetails));
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.forEach(d => batch.update(d.ref, updates));
+    await batch.commit();
+}
+
+export async function markOnlineOrdersAsReviewed(ids: string[], note: string) {
+    return markTransactionsAsReviewed(ids, note);
 }
