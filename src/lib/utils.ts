@@ -94,16 +94,18 @@ export function getPartyBalanceEffect(transaction: Pick<Transaction, 'type' | 'a
   const type = transaction.type;
   const amount = transaction.amount;
 
-  // Cash/Internal Transactions do NOT affect the running debt/due balance
+  // Cash/Internal Transactions do NOT affect the running debt/due balance per RULES.md
   if (['sale', 'purchase', 'income', 'spent'].includes(type)) {
       return 0;
   }
 
-  // Debit Types: Increases Customer Debt (Receivable) / Decreases Supplier Liability (Payable)
-  const isDebit = ['give', 'credit_sale', 'purchase_return', 'credit_give'].includes(type);
-  
   // Credit Types: Decreases Customer Debt (Receivable) / Increases Supplier Liability (Payable)
+  // receive, credit_purchase, sale_return, credit_income
   const isCredit = ['receive', 'credit_purchase', 'sale_return', 'credit_income'].includes(type);
+  
+  // Debit Types: Increases Customer Debt (Receivable) / Increases Supplier Liability (Payable)
+  // give, credit_sale, purchase_return, credit_give
+  const isDebit = ['give', 'credit_sale', 'purchase_return', 'credit_give'].includes(type);
 
   if (isCredit) return amount;
   if (isDebit) return -amount;

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -13,6 +12,24 @@ import { getEffectiveAmount, getPartyBalanceEffect, cleanUndefined, formatAmount
 import { handleSmsNotification } from './possmsnotificationService';
 
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
+
+/**
+ * Converts Firestore special types (like Timestamp) to plain values
+ * so they can be passed to Server Functions.
+ */
+const serializeForServer = (obj: any): any => {
+    if (!obj) return obj;
+    if (obj instanceof Timestamp) return obj.toDate().toISOString();
+    if (Array.isArray(obj)) return obj.map(serializeForServer);
+    if (typeof obj === 'object' && obj !== null) {
+        const clean: any = {};
+        Object.keys(obj).forEach(key => {
+            clean[key] = serializeForServer(obj[key]);
+        });
+        return clean;
+    }
+    return obj;
+};
 
 export function subscribeToAllTransactions(
   onUpdate: (transactions: Transaction[]) => void,
@@ -158,19 +175,6 @@ export function subscribeToTransactionsForVerification(
     }, (error) => onError(error as Error));
 }
 
-const serializeForServer = (obj: any): any => {
-    if (!obj) return obj;
-    const clean = { ...obj };
-    Object.keys(clean).forEach(key => {
-        if (clean[key] instanceof Timestamp) {
-            clean[key] = clean[key].toDate().toISOString();
-        } else if (typeof clean[key] === 'object' && clean[key] !== null) {
-            clean[key] = serializeForServer(clean[key]);
-        }
-    });
-    return clean;
-};
-
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<string> {
   if (!db) throw new Error('Firebase not configured');
   
@@ -194,6 +198,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           
           if (partySnap.exists()) {
               const partyData = partySnap.data();
+              // Serialize for server functions
               party = serializeForServer({ id: partySnap.id, ...partyData });
 
               previousDue = txsSnap.docs.reduce((sum, d) => {
@@ -210,6 +215,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     ...transactionData,
     involvedAccounts: Array.from(involvedAccounts),
     createdAt: serverTimestamp(),
+    enabled: transactionData.enabled ?? true,
   });
 
   const docRef = await addDoc(collection(db, 'transactions'), cleanData);
@@ -226,13 +232,13 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
                         (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
       
-      const savedTx = serializeForServer({ 
+      const savedTxForSms = serializeForServer({ 
         ...transactionData, 
         id: docRef.id,
         createdAt: new Date().toISOString()
       });
 
-      handleSmsNotification(savedTx, party, paidAmount, previousDue).catch(err => {
+      handleSmsNotification(savedTxForSms, party, paidAmount, previousDue).catch(err => {
           console.error("SMS notification failed in addTransaction:", err);
       });
   }
