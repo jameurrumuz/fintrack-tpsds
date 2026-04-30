@@ -207,30 +207,30 @@ function PosPage() {
   }, [appSettings, tabs.length]);
 
   useEffect(() => {
+    setLoading(true);
     const unsubParties = subscribeToParties(setParties, console.error);
     const unsubInventory = subscribeToInventoryItems(setInventory, console.error);
     const unsubAccounts = subscribeToAccounts(setAccounts, console.error);
     const unsubTransactions = subscribeToAllTransactions(setTransactions, console.error);
-    getAppSettings().then(setAppSettings);
-    setLoading(false);
+    
+    getAppSettings().then(settings => {
+      setAppSettings(settings);
+      setLoading(false);
+    });
+
     return () => { unsubParties(); unsubInventory(); unsubAccounts(); unsubTransactions(); };
   }, []);
 
   useEffect(() => {
-    if (partyIdFromQuery && parties.length > 0 && !loading) {
-      const party = parties.find(p => p.id === partyIdFromQuery);
-      if (party) {
-        const existingTab = tabs.find(t => t.state.selectedPartyId === party.id);
-        if (existingTab) {
-          setActiveTabId(existingTab.id);
-        } else {
-          createNewTab(party.id, party.name);
-        }
-      }
-    } else if (tabs.length === 0 && !loading && appSettings) {
+    if (!loading && tabs.length === 0 && appSettings) {
+      if (partyIdFromQuery) {
+        const party = parties.find(p => p.id === partyIdFromQuery);
+        createNewTab(partyIdFromQuery, party?.name || 'New Order');
+      } else {
         createNewTab();
+      }
     }
-  }, [partyIdFromQuery, parties, loading, createNewTab, tabs, appSettings]);
+  }, [loading, tabs.length, appSettings, partyIdFromQuery, parties, createNewTab]);
 
   const searchableItems = useMemo(() => {
     const incomeServices = (appSettings?.customerServices || [])
@@ -367,8 +367,8 @@ function PosPage() {
     }));
   };
 
-  if (loading || !appSettings || accounts.length === 0) {
-    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary h-12 w-12" /></div>;
+  if (loading || !appSettings || accounts.length === 0 || parties.length === 0) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
   }
 
   if (!activeTabState) {
@@ -575,7 +575,6 @@ function PosPage() {
                     const freshItem = inventory.find(i => i.id === item.id);
                     const stockInLocation = freshItem?.stock?.[item.location || 'default'] || 0;
                     const itemTotal = (item.sellPrice * item.sellQuantity) - (item.itemDiscount || 0);
-                    const profit = itemTotal - ((item.cost || 0) * item.sellQuantity);
                     return (
                         <Card key={item.cartItemId} className="p-3">
                             <div className="flex justify-between items-start mb-2">
