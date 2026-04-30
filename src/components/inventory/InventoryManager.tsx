@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -662,7 +663,7 @@ export default function InventoryManager() {
                                 <p className="font-black text-sm">৳{item.price.toLocaleString()}</p>
                                 <Badge className={cn(
                                     "text-[10px] px-2 py-0.5 border-0 font-bold",
-                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-50 text-white"
+                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-600 text-white"
                                 )}>
                                     Stock: {item.quantity}
                                 </Badge>
@@ -705,7 +706,7 @@ export default function InventoryManager() {
                                       <TableCell><Badge variant="secondary" className="text-[10px]">{item.category}</Badge></TableCell>
                                       <TableCell className="text-right font-bold">{formatAmount(item.price)}</TableCell>
                                       <TableCell className="text-center">
-                                          <Badge className={cn(item.quantity <= item.minStockLevel ? "bg-red-500" : "bg-green-500")}>
+                                          <Badge className={cn(item.quantity <= item.minStockLevel ? "bg-red-500" : "bg-green-600")}>
                                               {item.quantity}
                                           </Badge>
                                       </TableCell>
