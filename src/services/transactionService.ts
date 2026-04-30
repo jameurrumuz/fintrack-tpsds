@@ -158,6 +158,19 @@ export function subscribeToTransactionsForVerification(
     }, (error) => onError(error as Error));
 }
 
+const serializeForServer = (obj: any): any => {
+    if (!obj) return obj;
+    const clean = { ...obj };
+    Object.keys(clean).forEach(key => {
+        if (clean[key] instanceof Timestamp) {
+            clean[key] = clean[key].toDate().toISOString();
+        } else if (typeof clean[key] === 'object' && clean[key] !== null) {
+            clean[key] = serializeForServer(clean[key]);
+        }
+    });
+    return clean;
+};
+
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<string> {
   if (!db) throw new Error('Firebase not configured');
   
@@ -181,15 +194,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           
           if (partySnap.exists()) {
               const partyData = partySnap.data();
-              // Serializing party data for server function: Convert Timestamps to ISO strings
-              party = { 
-                id: partySnap.id, 
-                ...partyData,
-                createdAt: partyData.createdAt?.toDate ? partyData.createdAt.toDate().toISOString() : partyData.createdAt,
-                updatedAt: partyData.updatedAt?.toDate ? partyData.updatedAt.toDate().toISOString() : partyData.updatedAt,
-                lastContacted: partyData.lastContacted?.toDate ? partyData.lastContacted.toDate().toISOString() : partyData.lastContacted,
-                lastSeen: partyData.lastSeen?.toDate ? partyData.lastSeen.toDate().toISOString() : partyData.lastSeen,
-              } as Party;
+              party = serializeForServer({ id: partySnap.id, ...partyData });
 
               previousDue = txsSnap.docs.reduce((sum, d) => {
                   const tx = d.data() as Transaction;
@@ -221,11 +226,11 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
                         (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
       
-      const savedTx = { 
-        ...cleanData, 
+      const savedTx = serializeForServer({ 
+        ...transactionData, 
         id: docRef.id,
         createdAt: new Date().toISOString()
-      } as any;
+      });
 
       handleSmsNotification(savedTx, party, paidAmount, previousDue).catch(err => {
           console.error("SMS notification failed in addTransaction:", err);

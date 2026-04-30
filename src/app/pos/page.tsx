@@ -98,7 +98,7 @@ const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a custo
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <PopoverContent className="w-[320px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search..." />
                     <CommandList>
@@ -401,7 +401,6 @@ function PosPage() {
       const invoiceNumber = `INV-${Date.now()}`;
       const currentParty = parties.find(p => p.id === selectedPartyId);
       
-      // Calculate previous due for SMS
       const previousDue = transactions
             .filter(tx => tx.partyId === selectedPartyId && tx.enabled)
             .reduce((balance, tx) => balance + getPartyBalanceEffect(tx, false), 0);
@@ -431,9 +430,6 @@ function PosPage() {
           sendSms: sendSmsOnSave,
       };
 
-      // Accurate SMS handling - The central addTransaction handles single SMS if passed.
-      // But POS can create multiple payments (sale + separate payments).
-      // We pass sendSms: false to addTransaction and call manual combined SMS if needed.
       const resultId = await addTransaction({...txData, sendSms: false});
       
       if (sendSmsOnSave && currentParty) {
@@ -492,14 +488,11 @@ function PosPage() {
   };
 
   const handleRecalculateStock = async (itemId: string) => {
-      setIsRecalculatingStock(true);
       try {
           await recalculateStockForItem(itemId);
           toast({ title: 'Success!', description: 'Stock updated.' });
       } catch (error: any) {
           toast({ variant: 'destructive', title: 'Error', description: error.message });
-      } finally {
-          setIsRecalculatingStock(false);
       }
   };
 
@@ -605,8 +598,8 @@ function PosPage() {
                                             {!item.isService && (
                                                 <>
                                                     <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px]" onClick={() => setAdjustingItem(item)}>Adjust</Button>
-                                                    <Button variant="outline" size="sm" className="h-6 px-1.5" onClick={() => handleRecalculateStock(item.id)} disabled={isRecalculatingStock}>
-                                                        {isRecalculatingStock ? <Loader2 className="h-3 w-3 animate-spin"/> : <RefreshCcw className="h-3 w-3"/>}
+                                                    <Button variant="outline" size="sm" className="h-6 px-1.5" onClick={() => handleRecalculateStock(item.id)}>
+                                                        <RefreshCcw className="h-3 w-3"/>
                                                     </Button>
                                                 </>
                                             )}
@@ -633,9 +626,6 @@ function PosPage() {
                                     <Input type="number" className="h-7 w-20 text-right text-xs" value={item.itemDiscount || ''} onFocus={(e) => e.target.select()} onChange={e => handleCartItemChange(item.cartItemId, 'itemDiscount', parseFloat(e.target.value) || 0)} />
                                 </div>
                             </div>
-                            <div className={cn("mt-2 p-1 text-[10px] font-bold rounded flex justify-between", profit >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                                <span>ITEM PROFIT</span><span>{formatAmount(profit)} ({((profit / (Math.max(item.cost, 1) * item.sellQuantity)) * 100).toFixed(1)}%)</span>
-                            </div>
                         </Card>
                     );
                 })}
@@ -655,16 +645,6 @@ function PosPage() {
                         <SelectContent>{(appSettings?.businessProfiles || []).map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Notes</Label><Textarea value={notes} className="min-h-[80px]" onChange={e => updateActiveTabState({ notes: e.target.value })} />
-                    <Card className="border shadow-none"><CardHeader className="p-3 bg-muted/30"><CardTitle className="text-sm flex items-center gap-2 font-bold uppercase tracking-tight"><Truck className="h-4 w-4"/> Delivery</CardTitle></CardHeader>
-                        <CardContent className="p-3 space-y-4">
-                            <Label className="text-xs font-bold uppercase text-muted-foreground">Delivered By</Label><PartyCombobox parties={deliveryPersonnel} value={deliveryById} onChange={id => updateActiveTabState({ deliveryById: id })} />
-                            <Label className="text-xs font-bold uppercase text-muted-foreground">Charge</Label><Input type="number" value={deliveryCharge} className="h-10" onChange={e => updateActiveTabState({ deliveryCharge: parseFloat(e.target.value) || 0 })} />
-                            <RadioGroup value={deliveryChargePaidBy} onValueChange={v => updateActiveTabState({ deliveryChargePaidBy: v })} className="flex gap-4">
-                                <div className="flex items-center space-x-2"><RadioGroupItem value="customer" id="paid-by-customer" /><Label htmlFor="paid-by-customer" className="text-sm font-medium">Customer</Label></div>
-                                <div className="flex items-center space-x-2"><RadioGroupItem value={selectedVia} id="paid-by-profile" /><Label htmlFor="paid-by-profile" className="text-sm font-medium">{selectedVia}</Label></div>
-                            </RadioGroup>
-                        </CardContent>
-                    </Card>
                 </Card>
             </TabsContent>
             
@@ -681,17 +661,6 @@ function PosPage() {
                         </Select>
                     </div>
 
-                    <div className="flex justify-start">
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-7 px-3 text-[10px] uppercase font-bold" 
-                            onClick={handleAddPayment}
-                        >
-                            <Plus className="h-3 w-3 mr-1"/> Add Payment
-                        </Button>
-                    </div>
-
                     <div className="space-y-3">
                         {payments.map((p, i) => (
                             <div key={i} className="flex gap-2 items-end bg-muted/30 p-2 rounded-xl relative border">
@@ -706,9 +675,10 @@ function PosPage() {
                                     <Label className="text-[10px] font-bold text-muted-foreground uppercase">Amount</Label>
                                     <Input type="number" className="h-8 text-right text-xs" value={p.amount || ''} onFocus={(e) => e.target.select()} onChange={e => handlePaymentChange(i, 'amount', parseFloat(e.target.value) || 0)}/>
                                 </div>
-                                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePayment(i)}><Trash2 className="h-4 w-4"/></Button>
+                                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemovePayment(i)}><Trash2 className="h-4 w-4"/></Button>
                             </div>
                         ))}
+                         <Button variant="outline" size="sm" onClick={handleAddPayment}><Plus className="h-3 w-3 mr-1"/> Add Payment</Button>
                     </div>
 
                     <div className="space-y-2 border-b pb-4">
@@ -728,15 +698,7 @@ function PosPage() {
                     
                     <div className="flex items-center justify-between gap-4 pt-2">
                         <Label htmlFor="overall-discount" className="font-bold text-xs uppercase text-muted-foreground">Overall Discount</Label>
-                        <Input 
-                            id="overall-discount"
-                            type="number" 
-                            className="w-32 text-right h-10 font-black text-red-600"
-                            value={discount || ''} 
-                            onFocus={(e) => e.target.select()} 
-                            onChange={e => updateActiveTabState({ discount: parseFloat(e.target.value) || 0 })} 
-                            placeholder="0.00"
-                        />
+                        <Input id="overall-discount" type="number" className="w-32 text-right h-10 font-black text-red-600" value={discount || ''} onFocus={(e) => e.target.select()} onChange={e => updateActiveTabState({ discount: parseFloat(e.target.value) || 0 })} />
                     </div>
 
                     <div className="flex items-center justify-center gap-2 py-2">
@@ -744,11 +706,7 @@ function PosPage() {
                         <Label className="text-xs font-bold uppercase text-muted-foreground">Send SMS</Label>
                     </div>
                     
-                    <Button 
-                        className="w-full h-12 bg-green-600 hover:bg-green-700 text-base font-bold shadow-lg rounded-2xl transition-all active:scale-95" 
-                        onClick={handleCompleteSale} 
-                        disabled={isSaving || activeCart.length === 0}
-                    >
+                    <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-base font-bold shadow-lg rounded-2xl" onClick={handleCompleteSale} disabled={isSaving || activeCart.length === 0}>
                         {isSaving ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Save className="mr-2 h-5 w-5" />}
                         Complete Sale
                     </Button>

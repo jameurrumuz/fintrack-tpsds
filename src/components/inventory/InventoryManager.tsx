@@ -553,13 +553,12 @@ export default function InventoryManager() {
         <AlertDialog open={!!partyToDelete} onOpenChange={(open) => !open && setPartyToDelete(null)}>
           <AlertDialogContent>
               <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure you want to delete {partyToDelete?.name}?</AlertDialogTitle>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                   <AlertDialogDescriptionComponent>
-                      This action cannot be undone and will permanently delete this product. To confirm, please solve:
+                      This will permanently delete this product. solve: {deleteChallenge.num1} + {deleteChallenge.num2} = ?
                   </AlertDialogDescriptionComponent>
               </AlertDialogHeader>
               <div className="my-2 p-4 bg-muted rounded-md text-center">
-                  <span className="text-lg font-mono">{deleteChallenge.num1} + {deleteChallenge.num2} = ?</span>
                   <Input 
                       value={deleteChallenge.answer}
                       onChange={(e) => setDeleteChallenge({...deleteChallenge, answer: e.target.value})}
@@ -581,7 +580,6 @@ export default function InventoryManager() {
         </AlertDialog>
       )}
 
-      {/* Top Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard title="Total Items" value={stats.totalItems} icon={Boxes} colorClass="text-blue-600" />
         <SummaryCard title="Stock Value (Cost)" value={formatAmount(stats.stockValueCost)} icon={Archive} colorClass="text-orange-600" />
@@ -589,13 +587,12 @@ export default function InventoryManager() {
         <SummaryCard title="Low Stock" value={stats.lowStockCount} icon={AlertTriangle} colorClass="text-red-600" />
       </div>
 
-      {/* Filter and Action Bar */}
       <Card className="shadow-sm border-0 sticky top-16 z-20 bg-white/95 backdrop-blur-sm">
         <CardContent className="p-3 flex flex-wrap items-center gap-3">
             <div className="relative flex-grow min-w-[200px]">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                    placeholder="Search by name, SKU, or brand..." 
+                    placeholder="Search by name, SKU..." 
                     value={searchTerm} 
                     onChange={e => setSearchTerm(e.target.value)} 
                     className="pl-9 bg-gray-50 border-gray-200"
@@ -632,7 +629,6 @@ export default function InventoryManager() {
         </CardContent>
       </Card>
 
-      {/* Main Content Area */}
       {loading ? (
           <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>
       ) : viewMode === 'grid' ? (
@@ -643,12 +639,10 @@ export default function InventoryManager() {
                   
                   return (
                     <Card key={item.id} className="overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group relative bg-white">
-                        {/* Header with Title Overlay */}
-                        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-gradient-to-b from-black/50 to-transparent text-white drop-shadow-sm font-bold text-xs truncate">
+                        <div className="absolute top-0 left-0 right-0 z-10 p-2 bg-gradient-to-b from-black/50 to-transparent text-white font-bold text-xs truncate">
                             {item.name}
                         </div>
 
-                        {/* Actions Overlay */}
                         <div className="absolute top-8 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -681,15 +675,12 @@ export default function InventoryManager() {
                             </DropdownMenu>
                         </div>
 
-                        {/* Image Container */}
                         <div className="relative aspect-square w-full bg-muted flex items-center justify-center overflow-hidden">
                             {item.imageUrl ? (
                                 <Image src={item.imageUrl} alt={item.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
                             ) : (
-                                <div className="text-muted-foreground/20 font-bold text-xl select-none">400 × 400</div>
+                                <div className="text-muted-foreground/20 font-bold text-xl select-none">No Image</div>
                             )}
-                            
-                            {/* Profile Logo Overlay */}
                             {businessProfile?.logoUrl && (
                                 <div className="absolute bottom-2 right-2 w-10 h-10 rounded-full border bg-white/80 backdrop-blur-sm p-1 shadow-sm">
                                     <Image src={businessProfile.logoUrl} alt="Via" fill className="object-contain p-1" />
@@ -697,16 +688,11 @@ export default function InventoryManager() {
                             )}
                         </div>
 
-                        {/* Footer Info */}
                         <CardContent className="p-3 space-y-3 mt-auto">
-                            <Badge variant="outline" className="text-[10px] h-6 px-3 bg-gray-50 border-gray-100">{item.category}</Badge>
-                            
+                            <Badge variant="outline" className="text-[10px] h-6 px-3 bg-gray-50">{item.category}</Badge>
                             <div className="flex justify-between items-center">
                                 <p className="font-black text-sm">৳{item.price.toLocaleString()}</p>
-                                <Badge className={cn(
-                                    "text-[10px] px-2 py-0.5 border-0 font-bold",
-                                    isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-600 text-white"
-                                )}>
+                                <Badge className={cn("text-[10px] px-2 py-0.5 border-0 font-bold", isLowStock ? "bg-yellow-400 text-yellow-900" : "bg-green-600 text-white")}>
                                     Stock: {item.quantity}
                                 </Badge>
                             </div>
@@ -716,7 +702,6 @@ export default function InventoryManager() {
               })}
           </div>
       ) : (
-          /* List View (Table) */
           <Card className="border-0 shadow-sm overflow-hidden bg-white">
               <CardContent className="p-0">
                   <div className="rounded-md border-x overflow-x-auto">
