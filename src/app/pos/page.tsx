@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -40,6 +39,7 @@ import { PartyFormDialog } from '@/components/PartyManager';
 import { DatePicker } from '@/components/ui/date-picker';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { getQuotationById } from '@/services/quotationService';
+import { Switch } from '@/components/ui/switch';
 
 interface CartItem extends InventoryItem {
   cartItemId: string;
@@ -209,7 +209,6 @@ function PosPage() {
     setLoading(true);
     const unsubParties = subscribeToParties(setParties, (err) => {
         toast({ variant: 'destructive', title: 'Error fetching parties', description: err.message });
-        setLoading(false);
     });
     const unsubInventory = subscribeToInventoryItems(setInventory, console.error);
     const unsubAccounts = subscribeToAccounts(setAccounts, console.error);
@@ -225,13 +224,6 @@ function PosPage() {
 
     return () => { unsubParties(); unsubInventory(); unsubAccounts(); unsubTransactions(); };
   }, [toast]);
-
-  useEffect(() => {
-    if (!loading && tabs.length === 0 && appSettings) {
-        const partyFromQuery = parties.find(p => p.id === partyIdFromQuery);
-        createNewTab(partyIdFromQuery || '', partyFromQuery?.name || 'New Order');
-    }
-  }, [loading, tabs.length, appSettings, partyIdFromQuery, parties, createNewTab]);
 
   const searchableItems = useMemo(() => {
     const incomeServices = (appSettings?.customerServices || [])
@@ -368,30 +360,22 @@ function PosPage() {
     }));
   };
 
-  if (loading || !appSettings || accounts.length === 0 || parties.length === 0) {
-    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
-  }
-
-  if (!activeTabState) {
-    return <div className="flex justify-center items-center h-screen font-semibold text-muted-foreground">Initializing POS Session...</div>;
-  }
-
-  const { cart: activeCart, pricingTier, selectedPartyId, billDate, deliveryById, selectedVia, notes, discount, deliveryCharge, deliveryChargePaidBy, payments, sendSmsOnSave, saleType } = activeTabState;
-  
-  const subTotalAmount = activeCart.reduce((sum, item) => sum + (item.sellPrice * item.sellQuantity), 0);
-  const totalItemDisc = activeCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0);
-  const netTotalAmount = subTotalAmount - totalItemDisc;
-  const finalPayableAmount = netTotalAmount - discount + (deliveryChargePaidBy === 'customer' ? deliveryCharge : 0);
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-  const dueAmount = finalPayableAmount - totalPaid;
-  const totalItemsCount = activeCart.reduce((sum, i) => sum + i.sellQuantity, 0);
-
   const handleCompleteSale = async () => {
     if (!activeTabState) return;
+    const { cart: activeCart, selectedPartyId, billDate, deliveryById, deliveryCharge, deliveryChargePaidBy, payDeliveryChargeNow, discount, payments, notes, sendSmsOnSave, selectedVia } = activeTabState;
+
     if (activeCart.length === 0) {
       toast({ variant: 'destructive', title: 'Empty Cart', description: 'Please add items to the cart.' });
       return;
     }
+    
+    const subTotal = activeCart.reduce((sum, item) => sum + (item.sellPrice * item.sellQuantity), 0);
+    const totalItemDisc = activeCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0);
+    const netTotal = subTotal - totalItemDisc;
+    const finalPayable = netTotal - discount + (deliveryChargePaidBy === 'customer' ? deliveryCharge : 0);
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const dueAmount = finalPayable - totalPaid;
+
     if (dueAmount > 0.01 && !selectedPartyId) {
       toast({ variant: 'destructive', title: 'Customer Required', description: 'Credit sales require a customer.' });
       return;
@@ -402,10 +386,6 @@ function PosPage() {
       const invoiceNumber = `INV-${Date.now()}`;
       const currentParty = parties.find(p => p.id === selectedPartyId);
       
-      const previousDue = transactions
-            .filter(tx => tx.partyId === selectedPartyId && tx.enabled)
-            .reduce((balance, tx) => balance + getPartyBalanceEffect(tx, false), 0);
-
       const txData: any = {
           date: format(billDate, 'yyyy-MM-dd'),
           via: selectedVia,
@@ -418,7 +398,7 @@ function PosPage() {
             location: i.location 
           })),
           invoiceNumber,
-          amount: finalPayableAmount,
+          amount: finalPayable,
           partyId: selectedPartyId || 'walkin', 
           description: notes || `Sale. Invoice: ${invoiceNumber}`,
           type: (dueAmount > 0.01) ? 'credit_sale' : 'sale',
@@ -434,6 +414,10 @@ function PosPage() {
       const resultId = await addTransaction({...txData, sendSms: false});
       
       if (sendSmsOnSave && currentParty) {
+          const previousDue = transactions
+                .filter(tx => tx.partyId === selectedPartyId && tx.enabled)
+                .reduce((balance, tx) => balance + getPartyBalanceEffect(tx, false), 0);
+                
           const savedTransaction = { ...txData, id: resultId };
           handleSmsNotification(savedTransaction, currentParty, totalPaid, previousDue).catch(err => {
               console.error("SMS notification failed:", err);
@@ -441,32 +425,8 @@ function PosPage() {
       }
       
       toast({ title: 'Sale Completed', description: `Invoice #${invoiceNumber} created.` });
-      
-      setTabs(prev => {
-          if (prev.length === 1) {
-              const resetTab = { 
-                ...prev[0], 
-                state: { 
-                    ...prev[0].state, 
-                    cart: [], 
-                    payments: [], 
-                    discount: 0, 
-                    notes: '', 
-                    selectedPartyId: '',
-                    deliveryCharge: 0
-                }, 
-                name: 'Order 1' 
-              };
-              return [resetTab];
-          }
-          return prev.filter(t => t.id !== activeTabId);
-      });
-
-      if (partyIdFromQuery) {
-        router.push(`/parties/${partyIdFromQuery}`);
-      } else {
-        router.push('/transactions');
-      }
+      handleCloseTab(activeTabId);
+      if (tabs.length === 1) createNewTab();
     } catch (e: any) {
       console.error("Sale failed:", e);
       toast({ variant: 'destructive', title: 'Error', description: e.message });
@@ -488,14 +448,23 @@ function PosPage() {
     }
   };
 
-  const handleRecalculateStock = async (itemId: string) => {
-      try {
-          await recalculateStockForItem(itemId);
-          toast({ title: 'Success!', description: 'Stock updated.' });
-      } catch (error: any) {
-          toast({ variant: 'destructive', title: 'Error', description: error.message });
-      }
-  };
+  if (loading || !appSettings || accounts.length === 0 || parties.length === 0) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
+  }
+
+  if (!activeTabState) {
+    return <div className="flex justify-center items-center h-screen font-semibold text-muted-foreground">Initializing POS Session...</div>;
+  }
+
+  const { cart: activeCart, pricingTier, selectedPartyId, billDate, deliveryById, selectedVia, notes, discount, deliveryCharge, deliveryChargePaidBy, payments, sendSmsOnSave, saleType } = activeTabState;
+  
+  const subTotalAmount = activeCart.reduce((sum, item) => sum + (item.sellPrice * item.sellQuantity), 0);
+  const totalItemDisc = activeCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0);
+  const netTotalAmount = subTotalAmount - totalItemDisc;
+  const finalPayableAmount = netTotalAmount - discount + (deliveryChargePaidBy === 'customer' ? deliveryCharge : 0);
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const dueAmount = finalPayableAmount - totalPaid;
+  const totalItemsCount = activeCart.reduce((sum, i) => sum + i.sellQuantity, 0);
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-black flex flex-col">
@@ -595,14 +564,6 @@ function PosPage() {
                                                 </SelectContent>
                                             </Select>
                                             <Badge variant="outline" className="h-6 text-[10px]">Stock: {item.isService ? '∞' : stockInLocation}</Badge>
-                                            {!item.isService && (
-                                                <>
-                                                    <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px]" onClick={() => setAdjustingItem(item)}>Adjust</Button>
-                                                    <Button variant="outline" size="sm" className="h-6 px-1.5" onClick={() => handleRecalculateStock(item.id)}>
-                                                        <RefreshCcw className="h-3 w-3"/>
-                                                    </Button>
-                                                </>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
