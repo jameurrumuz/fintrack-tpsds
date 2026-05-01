@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -39,8 +40,6 @@ import { PartyFormDialog } from '@/components/PartyManager';
 import { DatePicker } from '@/components/ui/date-picker';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { getQuotationById } from '@/services/quotationService';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Switch } from '@/components/ui/switch';
 
 interface CartItem extends InventoryItem {
   cartItemId: string;
@@ -208,7 +207,10 @@ function PosPage() {
 
   useEffect(() => {
     setLoading(true);
-    const unsubParties = subscribeToParties(setParties, console.error);
+    const unsubParties = subscribeToParties(setParties, (err) => {
+        toast({ variant: 'destructive', title: 'Error fetching parties', description: err.message });
+        setLoading(false);
+    });
     const unsubInventory = subscribeToInventoryItems(setInventory, console.error);
     const unsubAccounts = subscribeToAccounts(setAccounts, console.error);
     const unsubTransactions = subscribeToAllTransactions(setTransactions, console.error);
@@ -216,19 +218,18 @@ function PosPage() {
     getAppSettings().then(settings => {
       setAppSettings(settings);
       setLoading(false);
+    }).catch(err => {
+        console.error("Settings load failed", err);
+        setLoading(false);
     });
 
     return () => { unsubParties(); unsubInventory(); unsubAccounts(); unsubTransactions(); };
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!loading && tabs.length === 0 && appSettings) {
-      if (partyIdFromQuery) {
-        const party = parties.find(p => p.id === partyIdFromQuery);
-        createNewTab(partyIdFromQuery, party?.name || 'New Order');
-      } else {
-        createNewTab();
-      }
+        const partyFromQuery = parties.find(p => p.id === partyIdFromQuery);
+        createNewTab(partyIdFromQuery || '', partyFromQuery?.name || 'New Order');
     }
   }, [loading, tabs.length, appSettings, partyIdFromQuery, parties, createNewTab]);
 
@@ -372,7 +373,7 @@ function PosPage() {
   }
 
   if (!activeTabState) {
-    return <div className="flex justify-center items-center h-screen font-semibold text-muted-foreground">Loading session...</div>;
+    return <div className="flex justify-center items-center h-screen font-semibold text-muted-foreground">Initializing POS Session...</div>;
   }
 
   const { cart: activeCart, pricingTier, selectedPartyId, billDate, deliveryById, selectedVia, notes, discount, deliveryCharge, deliveryChargePaidBy, payments, sendSmsOnSave, saleType } = activeTabState;
