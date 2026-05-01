@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
@@ -14,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, Save, Users, Loader2, ArrowLeft, Printer, Share2, ShoppingCart, User, Building, Phone, MapPin, ChevronsUpDown, Check, Calendar as CalendarIcon, Minus, ImageIcon, Camera, Upload, Truck, DollarSign, ScanLine, Pencil, Copy, Users2, CreditCard, Search, Package, Settings, X, RefreshCcw } from 'lucide-react';
 import { subscribeToParties, addParty } from '@/services/partyService';
-import { subscribeToInventoryItems, addInventoryItem, recalculateStockForItem } from '@/services/inventoryService';
+import { subscribeToInventoryItems, addInventoryItem } from '@/services/inventoryService';
 import { addTransaction, subscribeToAllTransactions } from '@/services/transactionService';
 import { handleSmsNotification } from '@/services/possmsnotificationService';
 import { subscribeToAccounts } from '@/services/accountService';
@@ -224,6 +225,15 @@ function PosPage() {
 
     return () => { unsubParties(); unsubInventory(); unsubAccounts(); unsubTransactions(); };
   }, [toast]);
+
+  // Handle Tab Creation after loading
+  useEffect(() => {
+    if (!loading && tabs.length === 0 && parties.length > 0) {
+        const partyFromQuery = parties.find(p => p.id === partyIdFromQuery);
+        const name = partyFromQuery ? partyFromQuery.name : 'New Order';
+        createNewTab(partyIdFromQuery || '', name);
+    }
+  }, [loading, tabs.length, parties, partyIdFromQuery, createNewTab]);
 
   const searchableItems = useMemo(() => {
     const incomeServices = (appSettings?.customerServices || [])
@@ -694,5 +704,14 @@ function PosPage() {
 }
 
 export default function PosPageWrapper() {
-  return <PosPage />;
+  return (
+    <Suspense fallback={
+        <div className="flex justify-center items-center h-screen">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+    }>
+        <PosPage />
+    </Suspense>
+  );
 }
+
