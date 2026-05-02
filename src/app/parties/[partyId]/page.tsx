@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useEffect, useMemo, useState, use } from 'react';
@@ -25,7 +26,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as AlertDialogDescriptionComponent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -237,7 +238,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
         grouped[t.date].push(t); 
     });
     
-    // AS PER RULES.MD: Oldest to Newest sorting for the ledger
+    // AS PER RULES.MD: Oldest to Newest sorting for the ledger (Oldest dates at top, Newest dates at bottom)
     const groupedArray = Object.entries(grouped).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime());
 
     const productStats = Array.from(enabledTxs.reduce((acc, tx) => {
@@ -412,7 +413,7 @@ function PartyLedgerPage({ params }: { params: Promise<{ partyId: string }> }) {
                               return (
                                 <TableRow key={t.id} className="group hover:bg-muted/30">
                                     <TableCell className="text-[10px]">{formatDate(date)}</TableCell>
-                                    <TableCell><div className="flex flex-col"><span className="text-xs font-semibold">{t.description}</span><div className="flex gap-1 mt-1">{accName && <Badge variant="secondary" className="text-[8px] h-4">{accName}</Badge>}<Badge variant="outline" className="text-[8px] h-4 uppercase">{t.type.replace('_', ' ')}</Badge></div></div></TableCell>
+                                    <TableCell><div className="flex flex-col"><span className="text-xs font-semibold">{t.description}</span><div className="flex gap-1 mt-1">{accName && <Badge variant="secondary" className="text-[8px] h-4">{accName}</Badge>}<Badge variant="outline" className="text-[8px] h-4 uppercase">{(t.type || '').replace('_', ' ')}</Badge></div></div></TableCell>
                                     <TableCell className="text-right text-red-600 text-[10px] font-mono">{isDebit ? formatAmount(t.amount, false) : '-'}</TableCell>
                                     <TableCell className="text-right text-green-600 text-[10px] font-mono">{isCredit ? formatAmount(t.amount, false) : '-'}</TableCell>
                                     <TableCell className="text-right font-bold text-[10px] font-mono">{formatAmount(t.runningBalance)}</TableCell>
