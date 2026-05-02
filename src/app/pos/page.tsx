@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -137,7 +136,7 @@ const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a custo
     );
 };
 
-export default function PosPage() {
+function PosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const partyIdFromQuery = searchParams.get('partyId');
@@ -315,7 +314,7 @@ export default function PosPage() {
       const txData: Omit<Transaction, 'id'> = {
           date: saleDate,
           via: selectedVia,
-          items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.sellQuantity, price: i.sellPrice, cost: i.cost, location: i.location })),
+          items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.sellQuantity, price: i.price, cost: i.cost, location: i.location })),
           invoiceNumber,
           amount: finalAmount,
           partyId: selectedPartyId || 'walkin',

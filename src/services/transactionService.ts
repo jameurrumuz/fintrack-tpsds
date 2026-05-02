@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -18,7 +17,7 @@ const getTransactionsCollection = () => db ? collection(db, 'transactions') : nu
  * Deeply converts Firestore special types (like Timestamp) to plain values
  * so they can be passed to Server Functions without serialization errors.
  */
-const serializeForServer = (obj: any): any => {
+export const serializeForServer = (obj: any): any => {
     if (obj === null || obj === undefined) return obj;
     
     if (obj instanceof Timestamp) return obj.toDate().toISOString();
