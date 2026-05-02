@@ -1,3 +1,4 @@
+
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -14,13 +15,24 @@ import { handleSmsNotification } from './possmsnotificationService';
 const getTransactionsCollection = () => db ? collection(db, 'transactions') : null;
 
 /**
- * Converts Firestore special types (like Timestamp) to plain values
+ * Deeply converts Firestore special types (like Timestamp) to plain values
  * so they can be passed to Server Functions without serialization errors.
  */
 const serializeForServer = (obj: any): any => {
     if (obj === null || obj === undefined) return obj;
+    
+    // Handle Firestore Timestamp
     if (obj instanceof Timestamp) return obj.toDate().toISOString();
+    if (typeof obj === 'object' && obj.seconds !== undefined && obj.nanoseconds !== undefined) {
+        try {
+            return new Date(obj.seconds * 1000 + obj.nanoseconds / 1000000).toISOString();
+        } catch (e) {
+            return obj;
+        }
+    }
+
     if (Array.isArray(obj)) return obj.map(serializeForServer);
+    
     if (typeof obj === 'object' && obj.constructor === Object) {
         const clean: any = {};
         Object.keys(obj).forEach(key => {
@@ -28,6 +40,7 @@ const serializeForServer = (obj: any): any => {
         });
         return clean;
     }
+    
     return obj;
 };
 
@@ -199,7 +212,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           ]);
           
           if (partySnap.exists()) {
-              // Serialize party object to handle Timestamps properly
+              // Deeply serialize party object to handle Timestamps properly
               partyDataForSms = serializeForServer({ id: partySnap.id, ...partySnap.data() });
 
               // Accurate previous due calculation

@@ -17,7 +17,6 @@ import { Plus, Trash2, Save, Users, Loader2, ArrowLeft, Printer, Share2, Shoppin
 import { subscribeToParties, addParty } from '@/services/partyService';
 import { subscribeToInventoryItems, addInventoryItem } from '@/services/inventoryService';
 import { addTransaction, subscribeToAllTransactions } from '@/services/transactionService';
-import { handleSmsNotification } from '@/services/possmsnotificationService';
 import { subscribeToAccounts } from '@/services/accountService';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -91,7 +90,7 @@ const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a custo
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
-                    className="w-full justify-between font-normal"
+                    className="w-full justify-between font-normal h-10"
                 >
                     {value && selectedParty ? selectedParty.name : placeholder}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -226,7 +225,6 @@ function PosPage() {
     return () => { unsubParties(); unsubInventory(); unsubAccounts(); unsubTransactions(); };
   }, [toast]);
 
-  // Handle Tab Creation after loading
   useEffect(() => {
     if (!loading && tabs.length === 0 && parties.length > 0) {
         const partyFromQuery = parties.find(p => p.id === partyIdFromQuery);
@@ -273,11 +271,11 @@ function PosPage() {
         
         if (existingIdx > -1) {
             const existing = newCart[existingIdx];
-            const stock = ('stock' in fresh ? (fresh as any).stock?.[loc] : Infinity) || 0;
-            if (existing.isService || existing.sellQuantity < stock) {
+            const stockAtLoc = ('stock' in fresh ? (fresh as any).stock?.[loc] : Infinity) || 0;
+            if (existing.isService || existing.sellQuantity < stockAtLoc) {
                 newCart[existingIdx] = { ...existing, sellQuantity: existing.sellQuantity + 1 };
             } else {
-                 toast({ variant: 'destructive', title: 'Stock Limit', description: `Only ${stock} available.` });
+                 toast({ variant: 'destructive', title: 'Stock Limit', description: `Only ${stockAtLoc} available in ${loc}.` });
             }
         } else {
             newCart.push({ 
@@ -394,7 +392,6 @@ function PosPage() {
     setIsSaving(true);
     try {
       const invoiceNumber = `INV-${Date.now()}`;
-      const currentParty = parties.find(p => p.id === selectedPartyId);
       
       const txData: any = {
           date: format(billDate, 'yyyy-MM-dd'),
@@ -421,18 +418,7 @@ function PosPage() {
           sendSms: sendSmsOnSave,
       };
 
-      const resultId = await addTransaction({...txData, sendSms: false});
-      
-      if (sendSmsOnSave && currentParty) {
-          const previousDue = transactions
-                .filter(tx => tx.partyId === selectedPartyId && tx.enabled)
-                .reduce((balance, tx) => balance + getPartyBalanceEffect(tx, false), 0);
-                
-          const savedTransaction = { ...txData, id: resultId };
-          handleSmsNotification(savedTransaction, currentParty, totalPaid, previousDue).catch(err => {
-              console.error("SMS notification failed:", err);
-          });
-      }
+      await addTransaction(txData);
       
       toast({ title: 'Sale Completed', description: `Invoice #${invoiceNumber} created.` });
       handleCloseTab(activeTabId);
@@ -458,7 +444,7 @@ function PosPage() {
     }
   };
 
-  if (loading || !appSettings || accounts.length === 0 || parties.length === 0) {
+  if (loading || !appSettings || accounts.length === 0) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
   }
 
@@ -553,7 +539,7 @@ function PosPage() {
                 )}
                 {activeCart.map(item => {
                     const freshItem = inventory.find(i => i.id === item.id);
-                    const stockInLocation = freshItem?.stock?.[item.location || 'default'] || 0;
+                    const stockAtLoc = freshItem?.stock?.[item.location || 'default'] || 0;
                     const itemTotal = (item.sellPrice * item.sellQuantity) - (item.itemDiscount || 0);
                     return (
                         <Card key={item.cartItemId} className="p-3">
@@ -564,16 +550,21 @@ function PosPage() {
                                         <h4 className="font-bold text-sm">{item.name}</h4>
                                         <div className="flex gap-1 items-center mt-1">
                                             <Select value={item.location} onValueChange={(v) => handleCartItemChange(item.cartItemId, 'location', v)}>
-                                                <SelectTrigger className="h-6 text-[10px] w-24">
+                                                <SelectTrigger className="h-6 text-[10px] w-32">
                                                     <SelectValue placeholder="Location" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {(appSettings?.inventoryLocations || ['default']).map(loc => (
-                                                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                                                    ))}
+                                                    {(appSettings?.inventoryLocations || ['default']).map(loc => {
+                                                        const stockAtLocation = freshItem?.stock?.[loc] || 0;
+                                                        return (
+                                                            <SelectItem key={loc} value={loc}>
+                                                                {loc} ({stockAtLocation})
+                                                            </SelectItem>
+                                                        )
+                                                    })}
                                                 </SelectContent>
                                             </Select>
-                                            <Badge variant="outline" className="h-6 text-[10px]">Stock: {item.isService ? '∞' : stockInLocation}</Badge>
+                                            <Badge variant="outline" className="h-6 text-[10px]">Stock: {item.isService ? '∞' : stockAtLoc}</Badge>
                                         </div>
                                     </div>
                                 </div>
@@ -612,7 +603,7 @@ function PosPage() {
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Bill Date</Label><DatePicker value={billDate} onChange={d => updateActiveTabState({ billDate: d as Date })} />
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Business Profile</Label>
                     <Select value={selectedVia} onValueChange={(v: any) => updateActiveTabState({ selectedVia: v })}>
-                        <SelectTrigger className="h-10"><SelectValue/></SelectTrigger>
+                        <SelectTrigger className="h-10"><SelectValue placeholder="Select business profile..." /></SelectTrigger>
                         <SelectContent>{(appSettings?.businessProfiles || []).map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Notes</Label><Textarea value={notes} className="min-h-[80px]" onChange={e => updateActiveTabState({ notes: e.target.value })} />
@@ -673,8 +664,8 @@ function PosPage() {
                     </div>
 
                     <div className="flex items-center justify-center gap-2 py-2">
-                        <Switch checked={sendSmsOnSave} onCheckedChange={v => updateActiveTabState({ sendSmsOnSave: v })} />
-                        <Label className="text-xs font-bold uppercase text-muted-foreground">Send SMS</Label>
+                        <Switch id="send-sms-pos" checked={sendSmsOnSave} onCheckedChange={v => updateActiveTabState({ sendSmsOnSave: v })} />
+                        <Label htmlFor="send-sms-pos" className="text-xs font-bold uppercase text-muted-foreground">Send SMS</Label>
                     </div>
                     
                     <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-base font-bold shadow-lg rounded-2xl" onClick={handleCompleteSale} disabled={isSaving || activeCart.length === 0}>
@@ -705,13 +696,6 @@ function PosPage() {
 
 export default function PosPageWrapper() {
   return (
-    <Suspense fallback={
-        <div className="flex justify-center items-center h-screen">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-    }>
-        <PosPage />
-    </Suspense>
+    <PosPage />
   );
 }
-
