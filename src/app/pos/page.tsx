@@ -17,11 +17,12 @@ import { Plus, Trash2, Save, Users, Loader2, ArrowLeft, Printer, Share2, Shoppin
 import { subscribeToParties, addParty } from '@/services/partyService';
 import { subscribeToInventoryItems, addInventoryItem } from '@/services/inventoryService';
 import { addTransaction, subscribeToAllTransactions } from '@/services/transactionService';
+import { handleSmsNotification } from '@/services/possmsnotificationService';
 import { subscribeToAccounts } from '@/services/accountService';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import type { Party, InventoryItem, TransactionVia, Account, Payment, Transaction, AppSettings, InventoryCategory, Quotation } from '@/types';
-import { formatAmount, getPartyBalanceEffect } from '@/lib/utils';
+import { formatAmount } from '@/lib/utils';
 import InvoiceDialog from '@/components/pos/InvoiceDialog';
 import { getAppSettings } from '@/services/settingsService';
 import { uploadImage } from '@/services/storageService';
@@ -38,8 +39,13 @@ import { ItemFormDialog, StockAdjustmentDialog } from '@/components/inventory/In
 import { PartyFormDialog } from '@/components/PartyManager';
 import { DatePicker } from '@/components/ui/date-picker';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { writeBatch, doc, collection, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { cleanUndefined, getPartyBalanceEffect } from '@/lib/utils';
 import { getQuotationById } from '@/services/quotationService';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Switch } from '@/components/ui/switch';
+
 
 interface CartItem extends InventoryItem {
   cartItemId: string;
@@ -49,7 +55,6 @@ interface CartItem extends InventoryItem {
   itemProfitPercentage?: number;
   itemDiscount?: number;
   location?: string;
-  isService?: boolean;
 }
 
 type SaleType = 'cash' | 'credit';
@@ -78,6 +83,7 @@ type SaleTab = {
   name: string;
   state: SaleState;
 };
+
 
 const PartyCombobox = ({ parties, value, onChange, placeholder = "Select a customer..." }: { parties: Party[], value: string, onChange: (value: string, name?: string) => void, placeholder?: string }) => {
     const [open, setOpen] = useState(false);
@@ -135,6 +141,7 @@ export default function PosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const partyIdFromQuery = searchParams.get('partyId');
+  const quotationIdFromQuery = searchParams.get('quotationId');
   const { toast } = useToast();
 
   const [parties, setParties] = useState<Party[]>([]);
@@ -142,11 +149,18 @@ export default function PosPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
   const [tabs, setTabs] = useState<SaleTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [posTab, setPosTab] = useState('items');
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isItemFormOpen, setIsItemFormOpen] = useState(false);
+  const [isNewPartyDialogOpen, setIsNewPartyDialogOpen] = useState(false);
+  const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
 
   const activeTabIndex = useMemo(() => tabs.findIndex(tab => tab.id === activeTabId), [tabs, activeTabId]);
   const activeTabState = useMemo(() => tabs[activeTabIndex]?.state, [tabs, activeTabIndex]);
@@ -168,23 +182,23 @@ export default function PosPage() {
     const defaultVia = appSettings?.businessProfiles?.[0]?.name as TransactionVia || 'Personal';
     
     const newTab: SaleTab = {
-      id: newTabId, 
+      id: newTabId,
       name,
       state: {
-        billDate: new Date(), 
-        selectedPartyId: partyId, 
-        deliveryById: '', 
+        billDate: new Date(),
+        selectedPartyId: partyId,
+        deliveryById: '',
         selectedVia: defaultVia,
-        cart: [], 
-        saleType: 'cash', 
-        payments: [], 
-        discount: 0, 
+        cart: [],
+        saleType: 'cash',
+        payments: [],
+        discount: 0,
         lastInvoice: null,
-        pricingTier: 'retail', 
-        deliveryCharge: 0, 
+        pricingTier: 'retail',
+        deliveryCharge: 0,
         deliveryChargePaidBy: 'customer',
-        payDeliveryChargeNow: false, 
-        notes: '', 
+        payDeliveryChargeNow: false,
+        notes: '',
         sendSmsOnSave: true,
       },
     };
@@ -198,6 +212,7 @@ export default function PosPage() {
     subscribeToParties(setParties, console.error);
     subscribeToInventoryItems(setInventory, console.error);
     subscribeToAccounts(setAccounts, console.error);
+    subscribeToAllTransactions(setTransactions, console.error);
     getAppSettings().then(settings => {
       setAppSettings(settings);
       setLoading(false);
@@ -205,10 +220,10 @@ export default function PosPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && tabs.length === 0) {
+    if (!loading && tabs.length === 0 && appSettings) {
         createNewTab();
     }
-  }, [loading, tabs.length, createNewTab]);
+  }, [loading, tabs.length, createNewTab, appSettings]);
 
   const handleAddItemToCart = useCallback((item: InventoryItem) => {
     updateActiveTabState(prev => {
@@ -242,16 +257,107 @@ export default function PosPage() {
     setSearchQuery('');
   }, [updateActiveTabState, inventory, appSettings, toast]);
 
-  if (loading || !activeTabState) {
-    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
+  const handleAdjustQuantity = useCallback((cartItemId: string, amount: number) => {
+    updateActiveTabState(prev => {
+        const updatedCart = prev.cart.map(item => {
+            if (item.cartItemId === cartItemId) {
+                const newQuantity = item.sellQuantity + amount;
+                const stockInLocation = item.stock?.[item.location || 'default'] || 0;
+                if (newQuantity > 0 && newQuantity <= stockInLocation) {
+                    return { ...item, sellQuantity: newQuantity };
+                } else if (newQuantity > stockInLocation) {
+                    toast({ variant: 'destructive', title: 'Stock Limit Exceeded', description: `Only ${stockInLocation} units of ${item.name} available.` });
+                }
+            }
+            return item;
+        }).filter(item => item.sellQuantity > 0);
+        return { cart: updatedCart };
+    });
+  }, [updateActiveTabState, toast]);
+
+  const handleCartItemChange = useCallback((cartItemId: string, field: string, value: any) => {
+    updateActiveTabState(prev => ({
+        cart: prev.cart.map(item => {
+            if (item.cartItemId === cartItemId) {
+                return { ...item, [field]: value };
+            }
+            return item;
+        })
+    }));
+  }, [updateActiveTabState]);
+
+  const handleRemoveFromCart = useCallback((cartItemId: string) => {
+    updateActiveTabState(prev => ({
+        cart: prev.cart.filter(item => item.cartItemId !== cartItemId)
+    }));
+  }, [updateActiveTabState]);
+
+  const handleCompleteSale = async () => {
+    if (!activeTabState) return;
+    const { cart, selectedPartyId, billDate, deliveryById, deliveryCharge, deliveryChargePaidBy, payDeliveryChargeNow, discount, payments, notes, sendSmsOnSave, selectedVia } = activeTabState;
+
+    if (cart.length === 0) {
+      toast({ variant: 'destructive', title: 'Empty Cart', description: 'Your cart is empty.' });
+      return;
+    }
+  
+    setIsSaving(true);
+    try {
+      const batch = writeBatch(db);
+      const saleDate = format(billDate, 'yyyy-MM-dd');
+      const invoiceNumber = `INV-${Date.now()}`;
+      
+      const totalItemValue = cart.reduce((sum, i) => sum + (i.sellPrice * i.sellQuantity), 0);
+      const finalAmount = totalItemValue - discount + (deliveryChargePaidBy === 'customer' ? deliveryCharge : 0);
+      const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+      const dueAmount = finalAmount - paidAmount;
+
+      const txData: Omit<Transaction, 'id'> = {
+          date: saleDate,
+          via: selectedVia,
+          items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.sellQuantity, price: i.sellPrice, cost: i.cost, location: i.location })),
+          invoiceNumber,
+          amount: finalAmount,
+          partyId: selectedPartyId || 'walkin',
+          description: notes || `Sale Invoice: ${invoiceNumber}`,
+          type: dueAmount > 0.01 ? 'credit_sale' : 'sale',
+          payments: dueAmount > 0.01 ? undefined : payments,
+          enabled: true,
+          sendSms: sendSmsOnSave,
+      };
+
+      const saleRef = doc(collection(db, 'transactions'));
+      batch.set(saleRef, cleanUndefined(txData));
+      
+      await batch.commit();
+      toast({ title: 'Sale Completed' });
+      router.push('/transactions');
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Sale Failed', description: error.message });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseTab = (id: string) => {
+    setTabs(prev => {
+        if (prev.length === 1) return prev;
+        const newTabs = prev.filter(t => t.id !== id);
+        if (activeTabId === id) setActiveTabId(newTabs[0].id);
+        return newTabs;
+    });
   }
 
-  const { cart: activeCart, selectedPartyId, billDate, selectedVia, notes, discount, deliveryCharge, deliveryChargePaidBy, payments, sendSmsOnSave, saleType } = activeTabState;
-  
-  const subTotalAmount = activeCart.reduce((sum, item) => sum + (item.sellPrice * item.sellQuantity), 0);
-  const totalItemDisc = activeCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0);
-  const finalPayableAmount = subTotalAmount - totalItemDisc - discount + (deliveryChargePaidBy === 'customer' ? deliveryCharge : 0);
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  if (loading || !appSettings || accounts.length === 0) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
+  }
+  if (!activeTabState) {
+    return <div className="flex justify-center items-center h-screen">Loading session...</div>;
+  }
+
+  const subTotalAmount = activeTabState.cart.reduce((sum, item) => sum + (item.sellPrice * item.sellQuantity), 0);
+  const finalPayableAmount = subTotalAmount - activeTabState.discount + (activeTabState.deliveryChargePaidBy === 'customer' ? activeTabState.deliveryCharge : 0);
+  const totalPaid = activeTabState.payments.reduce((sum, p) => sum + p.amount, 0);
   const dueAmount = finalPayableAmount - totalPaid;
 
   return (
@@ -284,7 +390,17 @@ export default function PosPage() {
             
             <TabsContent value="items" className="p-3 space-y-3">
                 <div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground"/><Input placeholder="Search..." className="pl-8" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div>
-                {activeCart.map(item => {
+                {searchQuery && (
+                    <div className="bg-background border rounded-lg p-2 space-y-2 max-h-60 overflow-y-auto">
+                        {filteredInventory.map(item => (
+                            <div key={item.id} className="flex justify-between items-center p-2 border-b last:border-b-0 cursor-pointer hover:bg-muted" onClick={() => handleAddItemToCart(item)}>
+                                <span>{item.name}</span>
+                                <span className="font-bold">৳{item.price}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {activeTabState.cart.map(item => {
                     const freshItem = inventory.find(i => i.id === item.id);
                     return (
                         <Card key={item.cartItemId} className="p-3">
@@ -330,14 +446,14 @@ export default function PosPage() {
             <TabsContent value="details" className="p-3 space-y-4">
                 <Card className="p-3 space-y-3">
                     <Label className="text-xs font-bold uppercase">Customer</Label>
-                    <PartyCombobox parties={parties} value={selectedPartyId} onChange={id => updateActiveTabState({ selectedPartyId: id })} />
-                    <Label className="text-xs font-bold uppercase">Bill Date</Label><DatePicker value={billDate} onChange={d => updateActiveTabState({ billDate: d as Date })} />
+                    <PartyCombobox parties={parties} value={activeTabState.selectedPartyId} onChange={id => updateActiveTabState({ selectedPartyId: id })} />
+                    <Label className="text-xs font-bold uppercase">Bill Date</Label><DatePicker value={activeTabState.billDate} onChange={d => updateActiveTabState({ billDate: d as Date })} />
                     <Label className="text-xs font-bold uppercase">Business Profile</Label>
-                    <Select value={selectedVia} onValueChange={(v: any) => updateActiveTabState({ selectedVia: v })}>
+                    <Select value={activeTabState.selectedVia} onValueChange={(v: any) => updateActiveTabState({ selectedVia: v })}>
                         <SelectTrigger><SelectValue placeholder="Select Profile" /></SelectTrigger>
                         <SelectContent>{(appSettings?.businessProfiles || []).map(p => <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Label className="text-xs font-bold uppercase">Notes</Label><Textarea value={notes} onChange={e => updateActiveTabState({ notes: e.target.value })} />
+                    <Label className="text-xs font-bold uppercase">Notes</Label><Textarea value={activeTabState.notes} onChange={e => updateActiveTabState({ notes: e.target.value })} />
                 </Card>
             </TabsContent>
             
@@ -349,7 +465,7 @@ export default function PosPage() {
                         <span className="text-xl font-black text-red-700">{formatAmount(dueAmount)}</span>
                     </div>
                     <div className="flex items-center justify-center gap-2 py-2">
-                        <Switch id="send-sms" checked={sendSmsOnSave} onCheckedChange={v => updateActiveTabState({ sendSmsOnSave: v })} />
+                        <Switch id="send-sms" checked={activeTabState.sendSmsOnSave} onCheckedChange={v => updateActiveTabState({ sendSmsOnSave: v })} />
                         <Label htmlFor="send-sms">Send SMS</Label>
                     </div>
                     <Button className="w-full h-12 text-base font-bold" onClick={handleCompleteSale} disabled={isSaving}>
@@ -362,10 +478,14 @@ export default function PosPage() {
 
       <footer className="fixed bottom-0 bg-white dark:bg-gray-950 border-t p-3 w-full z-10">
         <div className="flex justify-between items-center font-black">
-            <span className="text-sm">Items: {activeCart.length}</span>
+            <span className="text-sm">Items: {activeTabState.cart.length}</span>
             <span className="text-lg text-primary">{formatAmount(finalPayableAmount)}</span>
         </div>
       </footer>
     </div>
   );
+}
+
+export default function PosPageWrapper() {
+  return <PosPage />;
 }

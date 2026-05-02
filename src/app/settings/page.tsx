@@ -36,6 +36,15 @@ import { db } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { uploadImage } from '@/services/storageService';
 import Link from 'next/link';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableFooter,
+} from "@/components/ui/table";
 
 const paymentInstructionSchema = z.object({
   method: z.string().min(1, 'Method is required'),
@@ -157,7 +166,6 @@ export default function SettingsPage() {
   const [imagePreviews, setImagePreviews] = useState<Record<number, string>>({});
   const [isServiceFormOpen, setIsServiceFormOpen] = useState(false);
   const [editingService, setEditingService] = useState<CustomerService | null>(null);
-  const [isChangePinOpen, setIsChangePinOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<AppSettingsFormValues>({
@@ -194,6 +202,8 @@ export default function SettingsPage() {
           partyTypes: (settings.partyTypes || []).map(t => ({value: t})),
           partyGroups: (settings.partyGroups || []).map(g => ({value: g})),
           inventoryLocations: (settings.inventoryLocations || []).map(l => ({value: l})),
+          smsTemplates: settings.smsTemplates || [],
+          memberCategoryConfig: settings.memberCategoryConfig || [],
         });
         const previews: Record<number, string> = {};
         (settings.businessProfiles || []).forEach((p, i) => { if (p.logoUrl) previews[i] = p.logoUrl; });
