@@ -1,6 +1,6 @@
 
 import { db } from '@/lib/firebase';
-import type { SmsSettings, AppSettings, CustomerService, SmsSyncLog, InventoryCategory, ExpenseBook, ExpenseCategory, SalesTarget, SheetRow, SmsBlocklistRule, TradeLicenceField, SmsPackage, MemberCategoryConfig, PageSecurity, NewsCategory } from '@/types';
+import type { SmsSettings, AppSettings, CustomerService, SmsSyncLog, InventoryCategory, ExpenseBook, ExpenseCategory, SalesTarget, SheetRow, SmsBlocklistRule, TradeLicenceField, SmsPackage, MemberCategoryConfig, PageSecurity, NewsCategory, SmsTemplate } from '@/types';
 import { doc, getDoc, setDoc, collection, getDocs, updateDoc, arrayUnion, onSnapshot, runTransaction, arrayRemove } from 'firebase/firestore';
 import { cleanUndefined } from '@/lib/utils';
 
@@ -62,14 +62,7 @@ export async function getAppSettings(): Promise<AppSettings | null> {
         lastSyncResult: null,
         smsServiceEnabled: true,
         inventoryCategories: categories,
-        newsCategories: newsCategories.length > 0 ? newsCategories : [
-            { id: 'breaking', name: 'Breaking' },
-            { id: 'business', name: 'Business' },
-            { id: 'technology', name: 'Technology' },
-            { id: 'sports', name: 'Sports' },
-            { id: 'health', name: 'Health' },
-            { id: 'entertainment', name: 'Entertainment' },
-        ],
+        newsCategories: newsCategories.length > 0 ? newsCategories : [],
         adminLockedPages: [],
         userLockedPages: [],
         pageSecurity: {},
@@ -86,31 +79,29 @@ export async function getAppSettings(): Promise<AppSettings | null> {
             expiryWarningDays: 7,
         },
         memberCategoryConfig: [
-            { id: 'General', name: 'General', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'VIP', name: 'VIP', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Founder', name: 'Founder', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 10, incrementOnNewMember: 0 },
-            { id: 'Monthly', name: 'Monthly', profitPercentage: 0, joiningFee: 0, subscriptionDays: 30, incrementOnNewMember: 0 },
-            { id: 'Yearly', name: 'Yearly', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: '5 Year', name: '5 Year', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 5, incrementOnNewMember: 0 },
-            { id: 'Lifetime', name: 'Lifetime', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 99, incrementOnNewMember: 0 },
-            { id: 'Bronze', name: 'Bronze', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Silver', name: 'Silver', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Titanium', name: 'Titanium', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Gold', name: 'Gold', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Platinum', name: 'Platinum', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
-            { id: 'Diamond', name: 'Diamond', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365, incrementOnNewMember: 0 },
+            { id: 'General', name: 'General', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'VIP', name: 'VIP', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Founder', name: 'Founder', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 10 },
+            { id: 'Monthly', name: 'Monthly', profitPercentage: 0, joiningFee: 0, subscriptionDays: 30 },
+            { id: 'Yearly', name: 'Yearly', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: '5 Year', name: '5 Year', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 5 },
+            { id: 'Lifetime', name: 'Lifetime', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 * 99 },
+            { id: 'Bronze', name: 'Bronze', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Silver', name: 'Silver', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Titanium', name: 'Titanium', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Gold', name: 'Gold', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Platinum', name: 'Platinum', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
+            { id: 'Diamond', name: 'Diamond', profitPercentage: 0, joiningFee: 0, subscriptionDays: 365 },
         ],
     };
 
     if (settingsSnap.exists()) {
       const data = settingsSnap.data() as AppSettings;
-      // Combine fetched data with defaults to ensure all keys exist
       return { 
         ...defaults,
         ...data,
-        inventoryCategories: categories, // always override with fresh categories
+        inventoryCategories: categories,
         newsCategories: data.newsCategories?.length ? data.newsCategories : defaults.newsCategories,
-        // Ensure array fields are not undefined
         autoTransactionRules: data.autoTransactionRules || [],
         businessProfiles: data.businessProfiles?.length ? data.businessProfiles : defaults.businessProfiles,
         partyTypes: data.partyTypes?.length ? data.partyTypes : defaults.partyTypes,
@@ -129,63 +120,28 @@ export async function getAppSettings(): Promise<AppSettings | null> {
       };
     }
     
-    // Return default settings if none exist in DB
     return defaults;
 
   } catch (error) {
-      console.error("Failed to fetch app settings and categories:", error);
-      // Return a default structure on error to prevent app crash
-      return {
-        businessProfiles: [{ name: 'Personal' }],
-        partyTypes: [],
-        partyGroups: [],
-        fontSize: 16,
-        customerServices: [],
-        autoTransactionRules: [],
-        lastSyncResult: null,
-        smsServiceEnabled: true,
-        inventoryCategories: [],
-        newsCategories: [],
-        adminLockedPages: [],
-        userLockedPages: [],
-        pageSecurity: {},
-        autoLockTimeout: 0,
-        salesTargets: [],
-        smsBlocklist: [],
-        doneSms: [],
-        projectionReceivablePartyIds: [],
-        projectionPayablePartyIds: [],
-        smsTemplates: [],
-        smsPackages: [],
-        smsAlertSettings: {
-            lowBalanceThreshold: 500,
-            expiryWarningDays: 7,
-        },
-        memberCategoryConfig: [],
-      };
+      console.error("Failed to fetch app settings:", error);
+      return null;
   }
 }
 
 export async function addExpenseCategoryToBook(bookId: string, categoryName: string): Promise<void> {
   if (!db) throw new Error('Firebase is not configured.');
-  
   const settings = await getAppSettings();
-  if (!settings || !settings.expenseBooks) {
-    throw new Error('Expense books not found in settings.');
-  }
+  if (!settings || !settings.expenseBooks) throw new Error('Expense books not found.');
 
   const bookIndex = settings.expenseBooks.findIndex(book => book.id === bookId);
-  if (bookIndex === -1) {
-    throw new Error('Specified expense book not found.');
-  }
+  if (bookIndex === -1) throw new Error('Specified expense book not found.');
 
   const newCategory: ExpenseCategory = {
-    id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
     name: categoryName,
   };
 
   settings.expenseBooks[bookIndex].categories.push(newCategory);
-
   await saveAppSettings(settings);
 }
 
@@ -196,7 +152,6 @@ export async function addSmsToDoneList(sms: SheetRow): Promise<void> {
   await runTransaction(db, async (transaction) => {
     const settingsDoc = await transaction.get(settingsDocRef);
     const existingDoneSms: SheetRow[] = settingsDoc.exists() ? settingsDoc.data().doneSms || [] : [];
-    
     const isDuplicate = existingDoneSms.some((s: SheetRow) => s.date === sms.date && s.message === sms.message);
     
     if (!isDuplicate) {
@@ -213,14 +168,11 @@ export async function addSmsToDoneList(sms: SheetRow): Promise<void> {
 export async function removeSmsFromDoneList(smsToRemove: SheetRow): Promise<void> {
     if (!db) throw new Error('Firebase is not configured.');
     const settingsDocRef = doc(db, settingsCollectionName, mainAppSettingsDocName);
-    
     await runTransaction(db, async (transaction) => {
         const settingsDoc = await transaction.get(settingsDocRef);
         if (!settingsDoc.exists()) return;
-
         const existingDoneSms: SheetRow[] = settingsDoc.data().doneSms || [];
         const newDoneSms = existingDoneSms.filter(s => s.date !== smsToRemove.date || s.message !== smsToRemove.message);
-        
         transaction.update(settingsDocRef, { doneSms: newDoneSms });
     });
 }
@@ -235,14 +187,11 @@ export async function addSmsBlockRule(rule: Omit<SmsBlocklistRule, 'id'>): Promi
 export async function removeSmsBlockRule(ruleId: string): Promise<void> {
     if (!db) throw new Error('Firebase is not configured.');
     const settingsDocRef = doc(db, settingsCollectionName, mainAppSettingsDocName);
-    
     await runTransaction(db, async (transaction) => {
         const settingsDoc = await transaction.get(settingsDocRef);
         if (!settingsDoc.exists()) return;
-
         const existingRules: SmsBlocklistRule[] = settingsDoc.data().smsBlocklist || [];
         const newRules = existingRules.filter(rule => rule.id !== ruleId);
-        
         transaction.update(settingsDocRef, { smsBlocklist: newRules });
     });
 }

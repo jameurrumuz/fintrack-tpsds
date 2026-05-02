@@ -1,4 +1,3 @@
-
 'use client';
 
 import { db } from '@/lib/firebase';
@@ -21,7 +20,6 @@ const getTransactionsCollection = () => db ? collection(db, 'transactions') : nu
 const serializeForServer = (obj: any): any => {
     if (obj === null || obj === undefined) return obj;
     
-    // Handle Firestore Timestamp
     if (obj instanceof Timestamp) return obj.toDate().toISOString();
     if (typeof obj === 'object' && obj.seconds !== undefined && obj.nanoseconds !== undefined) {
         try {
@@ -61,15 +59,15 @@ export function subscribeToAllTransactions(
       } as Transaction;
     });
 
-    // Default sorting for general list: Newest first
+    // RULES.md: Sort by Date (Primary) then CreatedAt (Secondary) - Oldest First
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA; 
+        if (dateA !== dateB) return dateA - dateB; 
         
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeB - timeA;
+        return timeA - timeB;
     });
 
     onUpdate(transactions);
@@ -99,7 +97,7 @@ export function subscribeToTransactionsForParty(
             } as Transaction;
         });
 
-        // AS PER RULES.md: Oldest transactions at top, newest at bottom for Party Ledger
+        // AS PER RULES.md: Oldest transactions at top, newest at bottom
         transactions.sort((a, b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
@@ -109,82 +107,6 @@ export function subscribeToTransactionsForParty(
             return timeA - timeB;
         });
 
-        onUpdate(transactions);
-    }, (error) => onError(error as Error));
-}
-
-export function subscribeToTransactionsForPartyIds(
-  partyIds: string[],
-  onUpdate: (transactions: Transaction[]) => void,
-  onError: (error: Error) => void
-) {
-  const collectionRef = getTransactionsCollection();
-  if (!collectionRef || partyIds.length === 0) return () => {};
-
-  const q = query(collectionRef, where('partyId', 'in', partyIds.slice(0, 10)));
-
-  return onSnapshot(q, (snapshot) => {
-      const transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-      onUpdate(transactions);
-  }, (error) => onError(error as Error));
-}
-
-export function subscribeToPendingPayments(
-  onUpdate: (transactions: Transaction[]) => void,
-  onError: (error: Error) => void
-) {
-  const collectionRef = getTransactionsCollection();
-  if (!collectionRef) return () => {};
-
-  const q = query(collectionRef, where('paymentStatus', '==', 'pending'));
-  
-  return onSnapshot(q, (snapshot) => {
-    const transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-    onUpdate(transactions);
-  }, (error) => onError(error as Error));
-}
-
-export function subscribeToNewOnlineOrders(
-    onUpdate: (transactions: Transaction[]) => void,
-    onError: (error: Error) => void
-) {
-    const collectionRef = getTransactionsCollection();
-    if (!collectionRef) return () => {};
-
-    const q = query(
-        collectionRef, 
-        where('type', 'in', ['sale', 'credit_sale'])
-    );
-
-    return onSnapshot(q, (snapshot) => {
-        const orders = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Transaction))
-            .filter(t => !t.adminNotified && t.description?.startsWith('Purchase from Online Store'));
-        onUpdate(orders);
-    }, (error) => onError(error as Error));
-}
-
-export async function markOnlineOrdersAsNotified(ids: string[]): Promise<void> {
-    if (!db) return;
-    const batch = writeBatch(db);
-    ids.forEach(id => {
-        batch.update(doc(db, 'transactions', id), { adminNotified: true });
-    });
-    await batch.commit();
-}
-
-export function subscribeToTransactionsForVerification(
-    staffId: string,
-    onUpdate: (transactions: Transaction[]) => void,
-    onError: (error: Error) => void
-) {
-    const collectionRef = getTransactionsCollection();
-    if (!collectionRef) return () => {};
-
-    const q = query(collectionRef, where('verifiableBy', 'array-contains', staffId));
-
-    return onSnapshot(q, (snapshot) => {
-        const transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
         onUpdate(transactions);
     }, (error) => onError(error as Error));
 }
@@ -212,17 +134,14 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           ]);
           
           if (partySnap.exists()) {
-              // Deeply serialize party object to handle Timestamps properly
               partyDataForSms = serializeForServer({ id: partySnap.id, ...partySnap.data() });
-
-              // Accurate previous due calculation
               previousDue = txsSnap.docs.reduce((sum, d) => {
                   const tx = d.data() as Transaction;
                   return tx.enabled ? sum + getPartyBalanceEffect(tx, false) : sum;
               }, 0);
           }
       } catch (e) {
-          console.error("Error gathering data for SMS notification:", e);
+          console.error("Error gathering data for SMS:", e);
       }
   }
 
@@ -231,17 +150,13 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     involvedAccounts: Array.from(involvedAccounts),
     createdAt: serverTimestamp(),
     enabled: transactionData.enabled ?? true,
+    adminNotified: transactionData.adminNotified ?? false,
   });
 
   const docRef = await addDoc(collection(db, 'transactions'), cleanData);
   
-  if (transactionData.partyId) {
-    recalculatePartyBalance(transactionData.partyId);
-  }
-  
-  involvedAccounts.forEach(accId => {
-    recalculateAccountBalance(accId);
-  });
+  if (transactionData.partyId) recalculatePartyBalance(transactionData.partyId);
+  involvedAccounts.forEach(accId => recalculateAccountBalance(accId));
 
   if (transactionData.sendSms && partyDataForSms) {
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
@@ -253,9 +168,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         createdAt: new Date().toISOString()
       });
 
-      handleSmsNotification(savedTxForSms, partyDataForSms, paidAmount, previousDue).catch(err => {
-          console.error("SMS notification failed:", err);
-      });
+      handleSmsNotification(savedTxForSms, partyDataForSms, paidAmount, previousDue).catch(console.error);
   }
 
   return docRef.id;
@@ -270,29 +183,15 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
 
   const involvedAccounts = new Set<string>();
   const currentAccountId = updates.accountId !== undefined ? updates.accountId : oldData.accountId;
-  const currentFromAccountId = updates.fromAccountId !== undefined ? updates.fromAccountId : oldData.fromAccountId;
-  const currentToAccountId = updates.toAccountId !== undefined ? updates.toAccountId : oldData.toAccountId;
   const currentPayments = updates.payments !== undefined ? updates.payments : oldData.payments;
 
   if (currentAccountId) involvedAccounts.add(currentAccountId);
-  if (currentFromAccountId) involvedAccounts.add(currentFromAccountId);
-  if (currentToAccountId) involvedAccounts.add(currentToAccountId);
-  if (currentPayments) {
-    currentPayments.forEach(p => involvedAccounts.add(p.accountId));
-  }
+  if (currentPayments) currentPayments.forEach(p => involvedAccounts.add(p.accountId));
 
-  const cleanUpdates = cleanUndefined({
-    ...updates,
-    involvedAccounts: Array.from(involvedAccounts)
-  });
-  
-  await updateDoc(txRef, cleanUpdates);
+  await updateDoc(txRef, cleanUndefined({ ...updates, involvedAccounts: Array.from(involvedAccounts) }));
 
   const partiesToSync = new Set([oldData.partyId, updates.partyId].filter(Boolean) as string[]);
-  const accountsToSync = new Set([
-      ...(oldData.involvedAccounts || []),
-      ...Array.from(involvedAccounts)
-  ].filter(Boolean) as string[]);
+  const accountsToSync = new Set([...(oldData.involvedAccounts || []), ...Array.from(involvedAccounts)].filter(Boolean) as string[]);
 
   partiesToSync.forEach(pId => recalculatePartyBalance(pId));
   accountsToSync.forEach(aId => recalculateAccountBalance(aId));
@@ -308,64 +207,17 @@ export async function deleteTransaction(id: string): Promise<void> {
   await deleteDoc(txRef);
 
   if (data.partyId) recalculatePartyBalance(data.partyId);
-  if (data.involvedAccounts) {
-    data.involvedAccounts.forEach(accId => {
-        recalculateAccountBalance(accId);
-    });
-  }
-}
-
-export async function toggleTransaction(id: string, enabled: boolean): Promise<void> {
-    await updateTransaction(id, { enabled });
-}
-
-export async function bulkDeleteTransactions(ids: string[]): Promise<void> {
-    if (!db) return;
-    const batch = writeBatch(db);
-    ids.forEach(id => {
-        batch.update(doc(db, 'transactions', id), { enabled: false });
-    });
-    await batch.commit();
-    recalculateBalancesFromTransaction();
-}
-
-export async function bulkRestoreTransactions(ids: string[]): Promise<void> {
-    if (!db) return;
-    const batch = writeBatch(db);
-    ids.forEach(id => {
-        batch.update(doc(db, 'transactions', id), { enabled: true });
-    });
-    await batch.commit();
-    recalculateBalancesFromTransaction();
-}
-
-export async function markTransactionsAsReviewed(ids: string[], note: string): Promise<void> {
-    if (!db) return;
-    const batch = writeBatch(db);
-    ids.forEach(id => {
-        batch.update(doc(db, 'transactions', id), { 
-            suspicionReviewed: true, 
-            suspicionReviewNote: note 
-        });
-    });
-    await batch.commit();
+  if (data.involvedAccounts) data.involvedAccounts.forEach(recalculateAccountBalance);
 }
 
 export async function recalculateAccountBalance(accountId: string): Promise<void> {
     if (!db || !accountId) return;
-    if (accountId === 'walkin' || accountId === 'walkin-customer' || accountId === 'none') return;
-
     const accountRef = doc(db, 'accounts', accountId);
-    const accountSnap = await getDoc(accountRef);
-    if (!accountSnap.exists()) return;
-
     const txsSnap = await getDocs(query(collection(db, 'transactions'), where('involvedAccounts', 'array-contains', accountId)));
-    
     let balance = 0;
     txsSnap.docs.forEach(doc => {
         const tx = doc.data() as Transaction;
         if (!tx.enabled) return;
-
         if (tx.type === 'transfer') {
             if (tx.fromAccountId === accountId) balance -= tx.amount;
             if (tx.toAccountId === accountId) balance += tx.amount;
@@ -376,31 +228,23 @@ export async function recalculateAccountBalance(accountId: string): Promise<void
             balance += getEffectiveAmount(tx);
         }
     });
-
     await updateDoc(accountRef, { balance });
 }
 
 export async function recalculatePartyBalance(partyId: string): Promise<void> {
-    if (!db || !partyId || partyId === 'walkin' || partyId === 'walkin-customer' || partyId === 'none') return;
-
+    if (!db || !partyId || partyId === 'walkin') return;
     const partyRef = doc(db, 'parties', partyId);
-    const partySnap = await getDoc(partyRef);
-    if (!partySnap.exists()) return;
-
     const txsSnap = await getDocs(query(collection(db, 'transactions'), where('partyId', '==', partyId)));
-    
     let balance = 0;
     txsSnap.docs.forEach(doc => {
         const tx = doc.data() as Transaction;
-        balance += getPartyBalanceEffect(tx, false);
+        if (tx.enabled) balance += getPartyBalanceEffect(tx, false);
     });
-
     await updateDoc(partyRef, { balance });
 }
 
 export async function recalculateBalancesFromTransaction(startDate?: string): Promise<void> {
     if (!db) return;
-    
     const [txSnap, accSnap, partiesSnap] = await Promise.all([
         getDocs(collection(db, 'transactions')),
         getDocs(collection(db, 'accounts')),
@@ -408,50 +252,131 @@ export async function recalculateBalancesFromTransaction(startDate?: string): Pr
     ]);
 
     const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
-    const accounts = accSnap.docs.map(d => ({ id: d.id, ...d.data() } as Account));
-    const parties = partiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Party));
-
     const accountBalances: Record<string, number> = {};
-    accounts.forEach(acc => accountBalances[acc.id] = 0);
-
+    accSnap.docs.forEach(d => accountBalances[d.id] = 0);
     const partyBalances: Record<string, number> = {};
-    parties.forEach(p => partyBalances[p.id] = 0);
+    partiesSnap.docs.forEach(d => partyBalances[d.id] = 0);
 
     transactions.forEach(tx => {
         if (!tx.enabled) return;
-
         if (tx.type === 'transfer') {
-            if (tx.fromAccountId && accountBalances[tx.fromAccountId] !== undefined) {
-                accountBalances[tx.fromAccountId] -= tx.amount;
-            }
-            if (tx.toAccountId && accountBalances[tx.toAccountId] !== undefined) {
-                accountBalances[tx.toAccountId] += tx.amount;
-            }
-        } else if (tx.payments && tx.payments.length > 0) {
-            tx.payments.forEach(p => {
-                if (accountBalances[p.accountId] !== undefined) {
-                    accountBalances[p.accountId] += p.amount;
-                }
-            });
-        } else if (tx.accountId && accountBalances[tx.accountId] !== undefined) {
+            if (tx.fromAccountId) accountBalances[tx.fromAccountId] -= tx.amount;
+            if (tx.toAccountId) accountBalances[tx.toAccountId] += tx.amount;
+        } else if (tx.payments) {
+            tx.payments.forEach(p => accountBalances[p.accountId] += p.amount);
+        } else if (tx.accountId) {
             accountBalances[tx.accountId] += getEffectiveAmount(tx);
         }
-
         if (tx.partyId && partyBalances[tx.partyId] !== undefined) {
             partyBalances[tx.partyId] += getPartyBalanceEffect(tx, false);
         }
     });
 
     const batch = writeBatch(db);
-    
-    Object.entries(accountBalances).forEach(([id, balance]) => {
-        batch.update(doc(db, 'accounts', id), { balance });
-    });
-    
-    Object.entries(partyBalances).forEach(([id, balance]) => {
-        batch.update(doc(db, 'parties', id), { balance });
-    });
+    Object.entries(accountBalances).forEach(([id, balance]) => batch.update(doc(db, 'accounts', id), { balance }));
+    Object.entries(partyBalances).forEach(([id, balance]) => batch.update(doc(db, 'parties', id), { balance }));
+    await batch.commit();
+}
 
+export function subscribeToPendingPayments(onUpdate: (transactions: Transaction[]) => void, onError: (error: Error) => void) {
+  const collectionRef = getTransactionsCollection();
+  if (!collectionRef) return () => {};
+  const q = query(collectionRef, where('paymentStatus', '==', 'pending'), where('enabled', '==', true));
+  return onSnapshot(q, (snapshot) => {
+    onUpdate(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
+  }, onError as any);
+}
+
+export function subscribeToNewOnlineOrders(onUpdate: (transactions: Transaction[]) => void, onError: (error: Error) => void) {
+  const collectionRef = getTransactionsCollection();
+  if (!collectionRef) return () => {};
+  const q = query(collectionRef, where('adminNotified', '==', false), where('enabled', '==', true));
+  return onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Transaction))
+        .filter(t => t.description?.includes('Purchase from Online Store'));
+    onUpdate(orders);
+  }, onError as any);
+}
+
+export async function markOnlineOrdersAsNotified(orderIds: string[]) {
+    if (!db) return;
+    const batch = writeBatch(db);
+    orderIds.forEach(id => {
+        batch.update(doc(db, 'transactions', id), { adminNotified: true });
+    });
+    await batch.commit();
+}
+
+export async function deleteFilteredTransactions(ids: string[]) {
+    if (!db) return;
+    const batch = writeBatch(db);
+    const partiesToSync = new Set<string>();
+    const accountsToSync = new Set<string>();
+    for (const id of ids) {
+        const txRef = doc(db, 'transactions', id);
+        const snap = await getDoc(txRef);
+        if (snap.exists()) {
+            const data = snap.data() as Transaction;
+            if (data.partyId) partiesToSync.add(data.partyId);
+            if (data.involvedAccounts) data.involvedAccounts.forEach(a => accountsToSync.add(a));
+            batch.update(txRef, { enabled: false });
+        }
+    }
+    await batch.commit();
+    partiesToSync.forEach(recalculatePartyBalance);
+    accountsToSync.forEach(recalculateAccountBalance);
+}
+
+export async function toggleTransaction(id: string, enabled: boolean) {
+    await updateTransaction(id, { enabled });
+}
+
+export async function getAllTransactions(): Promise<Transaction[]> {
+    if (!db) return [];
+    const snap = await getDocs(collection(db, 'transactions'));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+}
+
+export async function recalculateAllPartyBalances(): Promise<number> {
+    if (!db) return 0;
+    const partiesSnap = await getDocs(collection(db, 'parties'));
+    for (const partyDoc of partiesSnap.docs) {
+        await recalculatePartyBalance(partyDoc.id);
+    }
+    return partiesSnap.size;
+}
+
+export function subscribeToTransactionsForPartyIds(partyIds: string[], onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef || partyIds.length === 0) return () => {};
+    return onSnapshot(collectionRef, (snapshot) => {
+        const txs = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Transaction))
+            .filter(t => t.partyId && partyIds.includes(t.partyId));
+        onUpdate(txs);
+    }, onError as any);
+}
+
+export function subscribeToTransactionsForVerification(staffId: string, onUpdate: (txs: Transaction[]) => void, onError: (e: Error) => void) {
+    const collectionRef = getTransactionsCollection();
+    if (!collectionRef) return () => {};
+    const q = query(collectionRef, where('paymentStatus', '==', 'pending'));
+    return onSnapshot(q, (snapshot) => {
+        onUpdate(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction)));
+    }, onError as any);
+}
+
+export async function attemptAutoVerification(txRef: string, trxId: string, channels: any[], amount: number): Promise<VerificationResult> {
+    return { isVerified: false };
+}
+
+export async function markTransactionsAsReviewed(ids: string[], note: string) {
+    if (!db) return;
+    const batch = writeBatch(db);
+    ids.forEach(id => {
+        batch.update(doc(db, 'transactions', id), { suspicionReviewed: true, suspicionReviewNote: note });
+    });
     await batch.commit();
 }
 
@@ -459,50 +384,15 @@ export async function recalculateAllFifoAndProfits(): Promise<{ updatedTransacti
     return { updatedTransactions: 0, updatedItems: 0 };
 }
 
-export async function recalculateAllPartyBalances(): Promise<number> {
-    if (!db) return 0;
-    await recalculateBalancesFromTransaction();
-    return 1;
-}
-
-export async function attemptAutoVerification(txRef: string, trxId: string, depositChannels: any[], amount: number): Promise<VerificationResult> {
-    return { isVerified: false };
-}
-
-export async function deleteFilteredTransactions(ids: string[]): Promise<void> {
-    await bulkDeleteTransactions(ids);
-}
-
 export async function restoreData(data: any): Promise<void> {
-    return;
-}
-
-export async function createTransaction(data: any) {
-    return await addTransaction(data);
-}
-
-export async function generateInvoiceNumber(): Promise<string> {
-    return `INV-${Date.now()}`;
-}
-
-export async function deleteTransactionByDetails(details: string) {
-    if (!db) return;
-    const q = query(collection(db, 'transactions'), where('description', '==', details));
-    const snap = await getDocs(q);
+    if (!db || !data) return;
     const batch = writeBatch(db);
-    snap.forEach(d => batch.delete(d.ref));
+    const txs = data.transactions || [];
+    for (const tx of txs) {
+        const { id, ...txData } = tx;
+        if (!id) continue;
+        const ref = doc(collection(db, 'transactions'), id);
+        batch.set(ref, txData);
+    }
     await batch.commit();
-}
-
-export async function updateTransactionByDetails(oldDetails: string, updates: Partial<Transaction>) {
-    if (!db) return;
-    const q = query(collection(db, 'transactions'), where('description', '==', oldDetails));
-    const snap = await getDocs(q);
-    const batch = writeBatch(db);
-    snap.forEach(d => batch.update(d.ref, updates));
-    await batch.commit();
-}
-
-export async function markOnlineOrdersAsReviewed(ids: string[], note: string) {
-    return markTransactionsAsReviewed(ids, note);
 }
