@@ -15,13 +15,13 @@ const getTransactionsCollection = () => db ? collection(db, 'transactions') : nu
 
 /**
  * Converts Firestore special types (like Timestamp) to plain values
- * so they can be passed to Server Functions.
+ * so they can be passed to Server Functions without serialization errors.
  */
 const serializeForServer = (obj: any): any => {
-    if (!obj) return obj;
+    if (obj === null || obj === undefined) return obj;
     if (obj instanceof Timestamp) return obj.toDate().toISOString();
     if (Array.isArray(obj)) return obj.map(serializeForServer);
-    if (typeof obj === 'object' && obj !== null) {
+    if (typeof obj === 'object' && obj.constructor === Object) {
         const clean: any = {};
         Object.keys(obj).forEach(key => {
             clean[key] = serializeForServer(obj[key]);
@@ -48,6 +48,7 @@ export function subscribeToAllTransactions(
       } as Transaction;
     });
 
+    // Default sorting for general list: Newest first
     transactions.sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -187,7 +188,8 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
   }
 
   let previousDue = 0;
-  let party: Party | null = null;
+  let partyDataForSms: Party | null = null;
+
   if (transactionData.sendSms && transactionData.partyId) {
       try {
           const partyRef = doc(db, 'parties', transactionData.partyId);
@@ -197,17 +199,17 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
           ]);
           
           if (partySnap.exists()) {
-              const partyData = partySnap.data();
-              // Serialize for server functions
-              party = serializeForServer({ id: partySnap.id, ...partyData });
+              // Serialize party object to handle Timestamps properly
+              partyDataForSms = serializeForServer({ id: partySnap.id, ...partySnap.data() });
 
+              // Accurate previous due calculation
               previousDue = txsSnap.docs.reduce((sum, d) => {
                   const tx = d.data() as Transaction;
                   return tx.enabled ? sum + getPartyBalanceEffect(tx, false) : sum;
               }, 0);
           }
       } catch (e) {
-          console.error("Error fetching data for SMS:", e);
+          console.error("Error gathering data for SMS notification:", e);
       }
   }
 
@@ -228,7 +230,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     recalculateAccountBalance(accId);
   });
 
-  if (transactionData.sendSms && party) {
+  if (transactionData.sendSms && partyDataForSms) {
       const paidAmount = transactionData.type === 'receive' ? transactionData.amount : 
                         (transactionData.payments?.reduce((s,p) => s + p.amount, 0) || 0);
       
@@ -238,8 +240,8 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         createdAt: new Date().toISOString()
       });
 
-      handleSmsNotification(savedTxForSms, party, paidAmount, previousDue).catch(err => {
-          console.error("SMS notification failed in addTransaction:", err);
+      handleSmsNotification(savedTxForSms, partyDataForSms, paidAmount, previousDue).catch(err => {
+          console.error("SMS notification failed:", err);
       });
   }
 
